@@ -93,7 +93,11 @@ class MSIData():
             position_data[line_count-1, 1] = int(line_data[1]) # Y
 
             position_data[line_count-1, 2] = int(line_data[2][-1]) # TMA?
+            
             position_data[line_count-1, 3] = int(line_data[3][3:]) # Core
+            
+            if position_data[line_count-1, 2] == 2:  # if TMA == 2, shift up by 100
+                position_data[line_count-1, 3] += 100
             position_data[line_count-1, 4] = self.diagnosis_dict[line_data[4]] # change diagnosis to numercial
             position_data[line_count-1, 5] = line_count - 2
             
@@ -128,50 +132,43 @@ class H5MSI():
         
         h5_files = os.listdir(self.data_folder)
         h5_files = [elem for elem in h5_files if elem.endswith('.hdf5')]
-        h5_files.sort()
         self.num_rois = len(h5_files)/2
         self.data_files = {}
-        self.label_files = {}
+        self.train_files = {}
+        self.val_files = {}
         
         for h5_file in h5_files:
-            print("Loading: ", h5_file)
             roi_path = os.path.join(self.data_folder, h5_file)
             
             if 'Labels' in roi_path:
-                dname = "roi" + h5_file[3] + "labels"
                 idx = h5_file.find('.')
                 dict_key = h5_file[0:idx]
-                
             else:
-                dname = "roi" + h5_file[3] + "data"
                 idx = h5_file.find('.')
                 dict_key = h5_file[0:idx]
 
             with h5py.File(roi_path, "r") as hf:
+                dname = list(hf.keys())[0]
                 n1 = hf.get(dname)
-                self.data_files[dict_key] = n1
-
-               
+                n1_array = np.copy(n1).flatten()
                 
+                self.data_files[dict_key] = n1_array
+        
+        print('Number of Samples in h5 datset: ', len(self.data_files.keys())//2)
+        
+        for key in self.data_files.keys():
+            if not ('Labels' in key) and ( len(key) > 5):
+                self.val_files[key] = self.data_files[key]
+                self.val_files[key+ 'Labels'] = self.data_files[key + 'Labels']
                 
+            if not ('Labels' in key) and ( len(key) <= 5):
+                self.train_files[key] = self.data_files[key]
+                self.train_files[key + 'Labels'] = self.data_files[key + 'Labels']
                 
             
             
-            
-            
-            
-            
         
-    
-    
-            
-        
-        
-        
-        
-        
-        
-        
-        
-#msi = MSIData()
 msi = H5MSI()
+msi.flatten_data()
+        
+        
