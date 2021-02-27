@@ -10,6 +10,8 @@ import os
 import sys
 import h5py
 import numpy as np
+import collections
+import matplotlib.pyplot as plt
 
 class ROI_Data():
     
@@ -22,37 +24,31 @@ class ROI_Data():
         self.xmin = int(np.min(sliced_roi_positions[:,0]))
         self.xmax = int(np.max(sliced_roi_positions[:,0]))
         self.ymin = int(np.min(sliced_roi_positions[:,1]))
-        self.ymax = int(np.max(sliced_roi_positions[:,1]))
+        self.ymax = int(np.max(sliced_roi_positions[:,1]))            
         
         print("Ymax: ", self.ymax)
         print("Ymin: ", self.ymin)
         print("XMax: ", self.xmax)
         print("XMin: ", self.xmin)
 
-        self.data = np.zeros((self.xmax-self.xmin, self.ymax-self.ymin, msi_data.shape[1]))
-        self.labels = np.zeros((self.xmax-self.xmin, self.ymax-self.ymin))
-        
+        self.data = np.zeros((sliced_roi_positions.shape[0], msi_data.shape[1]))
+        self.labels = np.zeros((sliced_roi_positions.shape[0]))
         
         for line in range(0, sliced_roi_positions.shape[0]):
-            self.data[int(sliced_roi_positions[line, 0]-self.xmin-1), int(sliced_roi_positions[line, 1]-self.ymin-1)] = msi_data[sliced_roi_positions[line, 5]]
-            self.labels[int(sliced_roi_positions[line, 0]-self.xmin-1), int(sliced_roi_positions[line, 1]-self.ymin)-1] = sliced_roi_positions[line,5]
-                        
-        print("Data Shape: ", self.data.shape)
+            
+            self.data[line, :] = msi_data[sliced_roi_positions[line, 5], :]
+            self.labels[line] = sliced_roi_positions[line, 4]
         
         
     def save_h5(self):
         
         data_filename = os.path.join(self.data_folder, 'ROI' + str(self.roi_num)+ '.hdf5')
-        
         with h5py.File(data_filename, "w") as f:
             dset = f.create_dataset("roi" + str(self.roi_num) + "data", data=self.data, dtype='f')
             
-        labels_filename = data_filename = os.path.join(self.data_folder, 'ROI'+ str(self.roi_num) + 'Labels' + '.hdf5')
-        
+        labels_filename = os.path.join(self.data_folder, 'ROI'+ str(self.roi_num) + 'Labels' + '.hdf5')
         with h5py.File(labels_filename, "w") as f:
             dset = f.create_dataset("roi" + str(self.roi_num) + "labels", data=self.labels, dtype='f')
-        
-        
 
 
 class MSIData():
@@ -80,7 +76,6 @@ class MSIData():
             line_data = line.split()
             line_count += 1
             
-        
         position_data = np.zeros((line_count-1, 6))
         
         line_count = 0
@@ -91,10 +86,8 @@ class MSIData():
             line_data = line.split() 
             position_data[line_count-1, 0] = int(line_data[0]) # X
             position_data[line_count-1, 1] = int(line_data[1]) # Y
-
             position_data[line_count-1, 2] = int(line_data[2][-1]) # TMA?
-            
-            position_data[line_count-1, 3] = int(line_data[3][3:]) # Core
+            position_data[line_count-1, 3] = int(line_data[3][3:]) # ROINUM
             
             if position_data[line_count-1, 2] == 2:  # if TMA == 2, shift up by 100
                 position_data[line_count-1, 3] += 100
@@ -119,14 +112,11 @@ class MSIData():
                 continue
             
             roi_data = ROI_Data(self.msispec, sliced_positions)
-            roi_data.save_h5()
-            
-            
+            roi_data.save_h5()    
             
 class H5MSI():
     
-     def __init__(self):
-        
+    def __init__(self):
         self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'Data')
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
         
@@ -149,8 +139,8 @@ class H5MSI():
 
             with h5py.File(roi_path, "r") as hf:
                 dname = list(hf.keys())[0]
-                n1 = hf.get(dname)
-                n1_array = np.copy(n1).flatten()
+                n1 = hf.get(dname)    
+                n1_array = np.copy(n1)
                 
                 self.data_files[dict_key] = n1_array
         
@@ -165,10 +155,51 @@ class H5MSI():
                 self.train_files[key] = self.data_files[key]
                 self.train_files[key + 'Labels'] = self.data_files[key + 'Labels']
                 
-            
-            
+    def histo_data(self, val = 0):
+        histo_count = np.zeros((5))
+        x_axis = [1, 2, 3, 4]
         
-msi = H5MSI()
-msi.flatten_data()
+        if val == 1:
+            for key in list(self.val_files.keys()):
+                if 'Label' in key:
+                    array = self.val_files[key]
+                    occurances = collections.Counter(array)
+                    loc = int(list(occurances.keys())[0])
+                    histo_count[loc] += occurances[loc]
+                    plt.title('Validation Data')
+        elif val ==0:
+            for key in list(self.train_files.keys()):
+                if 'Label' in key:
+                    array = self.train_files[key]
+                    occurances = collections.Counter(array)
+                    loc = int(list(occurances.keys())[0])
+                    histo_count[loc] += occurances[loc]
+                    plt.title('Training Data')
+                
+        plt.bar(x_axis, histo_count[1:])
         
+        plt.show()
+        
+        histo_count = np.zeros((5))
+        x_axis = [1, 2, 3, 4]
+        
+    def two_class_data(self):
+        for key in list(self.val_files.keys()):
+                if 'Label' in key:
+                    array = self.val_files[key]
+                    cancer_class_locs = np.where(array!=4)
+                    array[cancer_class_locs] = 0
+                    self.val_files[key] = array
+                    
+        for key in list(self.train_files.keys()):
+                if 'Label' in key:
+                    array = self.train_files[key]
+                    cancer_class_locs = np.where(array!=4)
+                    array[cancer_class_locs] = 0
+                    self.train_files[key] = array
+        
+
+#msi = H5MSI()
+#msi.histo_data(val=0)
+#msi.two_class_data()
         
