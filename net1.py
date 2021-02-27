@@ -114,11 +114,9 @@ class MSInet1(object):
         
         W_fc2 = weight_variable('W_fc2', [fc_units, self.num_classes])
         b_fc2 = bias_variable('b_fc2',  [self.num_classes])
-
         
         fc1 = tf.nn.relu(tf.matmul(flat_final_conv, W_fc1) + b_fc1)
         drop_fc1 = tf.nn.dropout(fc1, self.fc_keep_prob)
-        
         fc2 = tf.nn.relu(tf.matmul(drop_fc1, W_fc2) + b_fc2)
         
         self.y_conv = tf.identity(fc2, name='full_op')
@@ -130,6 +128,15 @@ class MSInet1(object):
         cross_entropy_sum = tf.reduce_sum(cross_entropy)
         train_step = v1.train.AdamOptimizer(learning_rate = lr).minimize(cross_entropy_sum)
         cost = cross_entropy_sum
+        
+        print('---------------------Starting Training------------------')
+        self.sess.run(v1.global_variables_initializer())
+        
+        for epoch in range(num_epochs):
+            np.random.shuffle(self.train_pos)
+            np.random.shuffle(self.train_neg)
+            epoch_loss_sum = 0
+            batch_idx = 0
 
 batch_size = 3
 fc_keep_prob = 1

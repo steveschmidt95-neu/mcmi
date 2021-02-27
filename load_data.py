@@ -197,9 +197,75 @@ class H5MSI():
                     cancer_class_locs = np.where(array!=4)
                     array[cancer_class_locs] = 0
                     self.train_files[key] = array
+                    
+    def flatten_data(self):
+        
+        total_train_length = 0
+        total_val_length = 0
+        for key in list(self.train_files.keys()):
+            if 'Label' not in key:
+                array = self.train_files[key]
+                input_shape = self.train_files[key].shape[1]
+                total_train_length += array.shape[0]
+
+        train_loc = 0
+        flat_train = np.zeros((total_train_length,input_shape))
+        flat_train_labels = np.zeros((total_train_length))
+
+        for key in list(self.train_files.keys()):
+            if 'Label' not in key:
+                array = self.train_files[key]
+                flat_train[train_loc:(array.shape[0]+train_loc), :] = array
+                
+                label_key = key + 'Labels'
+                labels_array = self.train_files[label_key]
+                
+                assert labels_array.shape[0] == array.shape[0]
+                
+                flat_train_labels[train_loc:(array.shape[0])+train_loc] = labels_array
+                train_loc += array.shape[0]
+                
+        self.flat_train = flat_train
+        self.flat_train_labels = flat_train_labels
+        
+        
+        total_train_length = 0
+        total_val_length = 0
+        for key in list(self.val_files.keys()):
+            if 'Label' not in key:
+                array = self.val_files[key]
+                input_shape = self.val_files[key].shape[1]
+                total_train_length += array.shape[0]
+
+        val_loc = 0
+        flat_val = np.zeros((total_train_length,input_shape))
+        flat_val_labels = np.zeros((total_train_length))
+
+        for key in list(self.val_files.keys()):
+            if 'Label' not in key:
+                array = self.val_files[key]
+                flat_val[val_loc:(array.shape[0]+val_loc), :] = array
+                
+                label_key = key + 'Labels'
+                labels_array = self.val_files[label_key]
+                
+                assert labels_array.shape[0] == array.shape[0]
+                
+                flat_val_labels[val_loc:(array.shape[0])+val_loc] = labels_array
+                val_loc += array.shape[0]
+                
+        self.flat_val = flat_val
+        self.flat_val_labels = flat_val_labels
         
 
-#msi = H5MSI()
+        
+        
+        
+        
+
+msi = H5MSI()
 #msi.histo_data(val=0)
-#msi.two_class_data()
+msi.two_class_data()
+msi.flatten_data()
+
         
