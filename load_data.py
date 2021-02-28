@@ -126,6 +126,7 @@ class H5MSI():
         self.data_files = {}
         self.train_files = {}
         self.val_files = {}
+        self.num_classes = 4
         
         for h5_file in h5_files:
             roi_path = os.path.join(self.data_folder, h5_file)
@@ -184,24 +185,28 @@ class H5MSI():
         x_axis = [1, 2, 3, 4]
         
     def two_class_data(self):
+        self.num_classes=2
         for key in list(self.val_files.keys()):
                 if 'Label' in key:
                     array = self.val_files[key]
                     cancer_class_locs = np.where(array!=4)
                     array[cancer_class_locs] = 0
+                    array[array!=0] = 1
                     self.val_files[key] = array
+                    
+                    
                     
         for key in list(self.train_files.keys()):
                 if 'Label' in key:
                     array = self.train_files[key]
                     cancer_class_locs = np.where(array!=4)
                     array[cancer_class_locs] = 0
+                    array[array!=0] = 1
                     self.train_files[key] = array
                     
     def flatten_data(self):
         
         total_train_length = 0
-        total_val_length = 0
         for key in list(self.train_files.keys()):
             if 'Label' not in key:
                 array = self.train_files[key]
@@ -226,11 +231,9 @@ class H5MSI():
                 train_loc += array.shape[0]
                 
         self.flat_train = flat_train
-        self.flat_train_labels = flat_train_labels
         
         
         total_train_length = 0
-        total_val_length = 0
         for key in list(self.val_files.keys()):
             if 'Label' not in key:
                 array = self.val_files[key]
@@ -253,19 +256,47 @@ class H5MSI():
                 
                 flat_val_labels[val_loc:(array.shape[0])+val_loc] = labels_array
                 val_loc += array.shape[0]
-                
         self.flat_val = flat_val
-        self.flat_val_labels = flat_val_labels
         
+        #flat_val_labels   = flat_val_labels - 1
+        #flat_train_labels = flat_train_labels - 1
+        #self.flat_val_labels = flat_val_labels
+        #self.flat_train_labels = flat_train_labels
 
         
+        # Convert to 1 hot labels        
+        new_flat_train_labels = np.zeros((flat_train_labels.shape[0], self.num_classes))
+        if self.num_classes == 4:    
+            for idx in range(0, flat_train_labels.shape[0]):
+                new_flat_train_labels[idx, int(flat_train_labels[idx])-1] = 1
+                
+        elif self.num_classes == 2:
+            for idx in range(0, flat_train_labels.shape[0]):
+                new_flat_train_labels[idx, int(flat_train_labels[idx])] = 1
         
+        else:
+            assert False # need 2 or 4 classes
+            
+        new_flat_val_labels = np.zeros((flat_val_labels.shape[0], self.num_classes))
+        if self.num_classes == 4:    
+            for idx in range(0, flat_val_labels.shape[0]):
+                new_flat_val_labels[idx, int(flat_val_labels[idx])-1] = 1
+                
+        elif self.num_classes == 2:
+            for idx in range(0, flat_val_labels.shape[0]):
+                new_flat_val_labels[idx, int(flat_val_labels[idx])] = 1
+        
+        else:
+            assert False # need 2 or 4 classes
+            
+        self.flat_val_labels = new_flat_val_labels
+        self.flat_train_labels = new_flat_train_labels
         
         
 
-msi = H5MSI()
+#msi = H5MSI()
 #msi.histo_data(val=0)
-msi.two_class_data()
-msi.flatten_data()
+#msi.two_class_data()
+#msi.flatten_data()
 
         
