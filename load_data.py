@@ -43,6 +43,7 @@ class ROI_Data():
     def save_h5(self):
         
         data_filename = os.path.join(self.data_folder, 'ROI' + str(self.roi_num)+ '.hdf5')
+        assert (len(self.data.shape)==2)
         with h5py.File(data_filename, "w") as f:
             dset = f.create_dataset("roi" + str(self.roi_num) + "data", data=self.data, dtype='f')
             
@@ -148,7 +149,7 @@ class H5MSI():
         print('Number of Samples in h5 datset: ', len(self.data_files.keys())//2)
         
         for key in self.data_files.keys():
-            if not ('Labels' in key) and ( len(key) > 5):
+            if not ('Labels' in key) and (len(key) > 5):
                 self.val_files[key] = self.data_files[key]
                 self.val_files[key+ 'Labels'] = self.data_files[key + 'Labels']
                 
@@ -220,6 +221,9 @@ class H5MSI():
         for key in list(self.train_files.keys()):
             if 'Label' not in key:
                 array = self.train_files[key]
+                
+                assert (len(array.shape)==2)
+                
                 flat_train[train_loc:(array.shape[0]+train_loc), :] = array
                 
                 label_key = key + 'Labels'
@@ -247,6 +251,7 @@ class H5MSI():
         for key in list(self.val_files.keys()):
             if 'Label' not in key:
                 array = self.val_files[key]
+                assert (len(array.shape)==2)
                 flat_val[val_loc:(array.shape[0]+val_loc), :] = array
                 
                 label_key = key + 'Labels'
@@ -293,6 +298,7 @@ class H5MSI():
         self.flat_train_labels = new_flat_train_labels
         
         
+#redo_msi = MSIData()
 
 #msi = H5MSI()
 #msi.histo_data(val=0)

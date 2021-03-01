@@ -46,6 +46,7 @@ class MSInet1(object):
         self.start_time = time.time()
         
         msi_dataset = H5MSI()
+        
         if num_classes == 2:
             msi_dataset.two_class_data() # remove this for multilable training
         msi_dataset.flatten_data()
@@ -54,11 +55,7 @@ class MSInet1(object):
         self.flat_train_labels = msi_dataset.flat_train_labels
         self.flat_val = msi_dataset.flat_val
         self.flat_val_labels = msi_dataset.flat_val_labels
-        
-                
         self.in_shape = self.flat_train.shape[1]
-        print('Input Shape: ', self.in_shape)
-        
         self.fc_unit = fc_units
         self.batch_size = batch_size
         self.fc_keep_prob = fc_keep_prob
@@ -114,7 +111,9 @@ class MSInet1(object):
         b_fc2 = bias_variable('b_fc2',  [self.num_classes])
         
         fc1 = tf.nn.relu(tf.matmul(flat_final_conv, W_fc1) + b_fc1)
-        drop_fc1 = tf.nn.dropout(fc1, self.fc_keep_prob)
+        #drop_fc1 = tf.nn.dropout(fc1, self.fc_keep_prob, training=self.training)
+        drop_fc1 = v1.layers.dropout(fc1, self.fc_keep_prob, training=self.training)
+
         fc2 = tf.nn.relu(tf.matmul(drop_fc1, W_fc2) + b_fc2)
         
         self.y_conv = tf.identity(fc2, name='full_op')
@@ -124,8 +123,6 @@ class MSInet1(object):
     
         cross_entropy = v1.nn.softmax_cross_entropy_with_logits_v2(labels=self.y_dev, logits=self.y_conv)
         cross_entropy_sum = tf.reduce_sum(cross_entropy)
-        #cross_entropy_sum = -v1.reduce_sum(self.y_dev*v1.log(self.y_conv + 1e-10))
-
         train_step = v1.train.AdamOptimizer(learning_rate = lr).minimize(cross_entropy_sum)
         cost = cross_entropy_sum
         
@@ -136,15 +133,22 @@ class MSInet1(object):
             epoch_loss_sum = 0
             batch_idx = 0
             
+            
+            # Clip Training for testing
+            self.flat_train = self.flat_train[0:100, :]
+            
+            
             while (batch_idx < self.flat_train.shape[0] and batch_idx+self.batch_size < self.flat_train.shape[0]):
+                print('BatchIDX: ', batch_idx, ' / ', self.flat_train.shape[0])
                 
                 train_batch = self.flat_train[batch_idx:batch_idx+self.batch_size,:]
                 train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
+                print(train_batch.shape)
                 train_labels = self.flat_train_labels[batch_idx:batch_idx+self.batch_size]
                 batch_idx += self.batch_size
                 
-                [_, cross_entropy_py] = self.sess.run([train_step, cost], feed_dict={self.xdev: train_batch, self.y_dev: train_labels, self.fc_keep_prob: keep_prob, self.training: True })
-                
+                feed_dict={self.xdev: train_batch, self.y_dev: train_labels, self.fc_keep_prob: keep_prob, self.training: True }
+                [_, cross_entropy_py] = self.sess.run([train_step, cost], feed_dict=feed_dict)
                 self.loss_log.append(cross_entropy_py)
                 epoch_loss_sum += cross_entropy_py
                 
@@ -165,22 +169,19 @@ class MSInet1(object):
                     val_labels = self.flat_val_labels[batch_idx:batch_idx+self.batch_size]  
                     batch_idx += self.batch_size
                     
-                    feed_dict={self.xdev: val_batch, self.y_dev: val_labels, self.fc_keep_prob: 1, self.training: False }
+                    #feed_dict={self.xdev: val_batch, self.fc_keep_prob: 1, self.training: False}
+    
+                    feed_dict={self.xdev: val_batch, self.fc_keep_prob: keep_prob, self.training: False }
+
                     classification = self.sess.run(v1.nn.softmax(self.y_conv), feed_dict)
                     
                     print(classification.shape)
                     print(classification)
                     
-                    flat_val_predictions = np.zeros((self.flat_val_labels.shape[0]))
-                    print(flat_val_predictions.shape)
-                    
                     assert False
-                    
-                    
-    
                 
 
-batch_size = 1
+batch_size = 10
 fc_keep_prob = 1
 filters_layer1 = 4
 filters_layer2 = 8
@@ -189,11 +190,11 @@ width1 = 38
 width2 = 18
 width3 = 16
 num_classes= 4
-num_epochs = 5
+num_epochs = 50
 fc_units = 10
 keep_prob=.9
 test_every_epoch = True
-x_epoch = 4
+x_epoch = 1
 lr = .00001
 
 # for two class labels, 0 is healthy 1 is cancerous
