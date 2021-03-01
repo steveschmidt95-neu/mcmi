@@ -298,6 +298,7 @@ class H5MSI():
         self.flat_train_labels = new_flat_train_labels
         
         
+        
 #redo_msi = MSIData()
 
 #msi = H5MSI()
