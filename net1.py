@@ -58,7 +58,6 @@ class MSInet1(object):
         self.in_shape = self.flat_train.shape[1]
         self.fc_unit = fc_units
         self.batch_size = batch_size
-        self.fc_keep_prob = fc_keep_prob
         self.num_classes = num_classes
         self.filters_layer1 = filters_layer1
         self.filters_layer2 = filters_layer2
@@ -80,7 +79,6 @@ class MSInet1(object):
         filters_layer1 = self.filters_layer1
         filters_layer2 = self.filters_layer2
         filters_layer3= self.filters_layer3
-        in_width = self.in_shape
         
         W_conv1 = weight_variable('W_conv1',[width1, 1, filters_layer1])
         b_conv1 = bias_variable('b_conv1',[filters_layer1])
@@ -96,11 +94,15 @@ class MSInet1(object):
         
         conv1 =   tf.nn.relu(conv1d(self.xdev, W_conv1) + b_conv1) 
         pool1 = tf.nn.max_pool(conv1, 2, 2, padding= "VALID")
+        
+        batch1 = v1.layers.batch_normalization(pool1, training=self.training)
 
-        conv2 = tf.nn.relu(conv1d(pool1, W_conv2) + b_conv2) 
+        conv2 = tf.nn.relu(conv1d(batch1, W_conv2) + b_conv2) 
         pool2 = tf.nn.max_pool(conv2, 2, 2, padding= "VALID")
         
-        conv3 =   tf.nn.relu(conv1d(pool2, W_conv3) + b_conv3) 
+        batch2 = v1.layers.batch_normalization(pool2, training=self.training)
+        
+        conv3 =   tf.nn.relu(conv1d(batch2, W_conv3) + b_conv3) 
         pool3 = tf.nn.max_pool(conv3, 2, 2, padding="VALID")
         flat_final_conv = v1.layers.flatten(pool3)
         
@@ -113,8 +115,10 @@ class MSInet1(object):
         fc1 = tf.nn.relu(tf.matmul(flat_final_conv, W_fc1) + b_fc1)
         #drop_fc1 = tf.nn.dropout(fc1, self.fc_keep_prob, training=self.training)
         drop_fc1 = v1.layers.dropout(fc1, self.fc_keep_prob, training=self.training)
+        
+        batch3 = v1.layers.batch_normalization(drop_fc1, training=self.training)
 
-        fc2 = tf.nn.relu(tf.matmul(drop_fc1, W_fc2) + b_fc2)
+        fc2 = tf.nn.relu(tf.matmul(batch3, W_fc2) + b_fc2)
         
         self.y_conv = tf.identity(fc2, name='full_op')
         
@@ -154,10 +158,41 @@ class MSInet1(object):
             
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
         return(train_batch, train_labels)
- 
+    
+    def get_test_batch(self):
+        
+        val_with_labels = np.zeros((self.flat_val.shape[0], self.flat_val.shape[1] + self.num_classes))
+        val_with_labels[:, 0:self.flat_val.shape[1]] = self.flat_val
+        val_with_labels[:, self.flat_val.shape[1]:self.flat_val.shape[1]+self.num_classes]= self.flat_val_labels[:, :]
+        np.random.shuffle(val_with_labels)
+        
+        self.flat_val = val_with_labels[:, 0:self.flat_val.shape[1]]
+        self.flat_val_labels = val_with_labels[:, ((self.num_classes)*-1):]
+        
+        val_batch = np.zeros((self.batch_size, self.flat_val.shape[1]))
+        val_labels = np.zeros((self.batch_size, self.num_classes))
+        
+        batch_div = self.batch_size//self.num_classes
+        
+        for class_idx in range(0,self.num_classes):
+    
+            class_locs = np.where(self.flat_val_labels[:, class_idx]==1)[0:batch_div]
+            
+            assert len(class_locs[0]) >= batch_div # Need 
+            class_locs = class_locs[0][0:batch_div]
+            class_values = self.flat_val[class_locs[0:batch_div], :]
+            class_labels = self.flat_val_labels[class_locs, :]
+            
+            val_batch[((self.batch_size//self.num_classes)*class_idx):(batch_div)*class_idx +batch_div, :] = class_values
+            val_labels[((self.batch_size//self.num_classes)*class_idx):(batch_div)*class_idx +batch_div, :] = class_labels
+        
+        val_batch = np.reshape(val_batch, (val_batch.shape[0], val_batch.shape[1], 1))
+
+        return(val_batch, val_labels)
         
         
-    def train_X_epoch(self, num_epochs = 1, lr = .001, keep_prob=.8,  test_every_epoch = False, x_epoch=5, shuffle=False):
+        
+    def train_X_epoch(self, num_epochs = 1, lr = .001, keep_prob=.8,  test_every_epoch = False, x_epoch=5):
     
         cross_entropy = v1.nn.softmax_cross_entropy_with_logits_v2(labels=self.y_dev, logits=self.y_conv)
         cross_entropy_sum = tf.reduce_sum(cross_entropy)
@@ -175,13 +210,19 @@ class MSInet1(object):
 
             feed_dict={self.xdev: train_batch, self.y_dev: train_labels, self.fc_keep_prob: keep_prob, self.training: True }
             [_, cross_entropy_py] = self.sess.run([train_step, cost], feed_dict=feed_dict)
+            classification = self.sess.run(v1.nn.softmax(self.y_conv), feed_dict)
+
+
             epoch_loss_sum += cross_entropy_py
                 
             sci_loss = '%e' % epoch_loss_sum
             print('')
             print('Epoch ' + str(epoch+1) + ' Loss: ' + str(sci_loss))
             
+
             if test_every_epoch and ((epoch+1)%x_epoch == 0) and epoch !=0:
+                '''
+               # This is for testing all validation data, pretty slow
                 
                 batch_idx = 0
                 label_predictions = np.zeros_like(self.flat_val_labels)
@@ -196,6 +237,10 @@ class MSInet1(object):
                     classification = self.sess.run(v1.nn.softmax(self.y_conv), feed_dict)
                     label_predictions[batch_idx:batch_idx+self.batch_size, :] = classification
                     batch_idx += self.batch_size
+                    
+                    self.metric_validation(label_predictions)
+                    assert False
+                    
                 
                 remaining = (self.flat_val.shape[0] - batch_idx)
                 if (remaining > 0):
@@ -205,23 +250,38 @@ class MSInet1(object):
                 feed_dict={self.xdev: val_batch, self.fc_keep_prob: keep_prob, self.training: False}
                 classification = self.sess.run(v1.nn.softmax(self.y_conv), feed_dict)
                 label_predictions[batch_idx:batch_idx+remaining, :] = classification[0:remaining, :]
-                
-                self.metric_validation(label_predictions)
+                '''
+                val_data, val_labels = self.get_test_batch()
+                feed_dict={self.xdev: val_data, self.fc_keep_prob: keep_prob, self.training: False }
+                classification = self.sess.run(v1.nn.softmax(self.y_conv), feed_dict)
+
+                self.metric_validation(classification, batch_labels=val_labels)
 
 
                 
-    def metric_validation(self, predictions):
+    def metric_validation(self, predictions, batch_labels=None):
         one_hot_predictions= np.zeros_like(predictions)
         one_hot_predictions[np.arange(len(predictions)), predictions.argmax(1)] = 1
+        if batch_labels is not None:
+            mult = batch_labels * one_hot_predictions
+        else:
+            mult = self.flat_val_labels * one_hot_predictions
+
         
-        mult = self.flat_val_labels * one_hot_predictions
         
         if self.num_classes == 4:
-        
-            class1_total = np.sum(self.flat_val_labels[:,0])
-            class2_total = np.sum(self.flat_val_labels[:,1])
-            class3_total = np.sum(self.flat_val_labels[:,2])
-            class4_total = np.sum(self.flat_val_labels[:,3])
+            
+            if batch_labels is not None:
+                class1_total = np.sum(batch_labels[:,0])
+                class2_total = np.sum(batch_labels[:,1])
+                class3_total = np.sum(batch_labels[:,2])
+                class4_total = np.sum(batch_labels[:,3])
+            else:
+                class1_total = np.sum(self.flat_val_labels[:,0])
+                class2_total = np.sum(self.flat_val_labels[:,1])
+                class3_total = np.sum(self.flat_val_labels[:,2])
+                class4_total = np.sum(self.flat_val_labels[:,3])
+
             
             class1_correct = np.sum(mult[:,0])
             class2_correct = np.sum(mult[:,1])
@@ -229,52 +289,55 @@ class MSInet1(object):
             class4_correct = np.sum(mult[:,3])
             
             print("Accuracy Results ---------------------------------------")
-            print('High Accuracy: ', class1_correct/class1_total)
+            print('High Accuracy: ', class1_correct/class1_total, '%')
+            
+            print('CA Accuracy: ', class2_correct/class2_total, '%')
+            
+            print('Low Accuracy: ', class3_correct/class3_total, '%')
+           
+            print('Healthy Accuracy: ', class4_correct/class4_total, '%')
             print('             Total High: ', class1_total, ' Correct High: ', class1_correct)
-            print('CA Accuracy: ', class2_correct/class2_total)
             print('             Total CA : ', class2_total, ' Correct CA : ', class2_correct)
-            print('Low Accuracy: ', class3_correct/class3_total)
             print('             Total Low: ', class3_total, ' Correct Low : ', class3_correct)
-            print('Healthy Accuracy: ', class4_correct/class4_total)
             print('             Total Healthy : ', class4_total, ' Correct Healthy : ', class4_correct)
             print('*'*20)
             
         elif self.num_classes ==    2:
-            class1_total = np.sum(self.flat_val_labels[:,0])
-            class2_total = np.sum(self.flat_val_labels[:,1])
-
+            
+            if batch_labels is not None:
+                class1_total = np.sum(batch_labels[:,0])
+                class2_total = np.sum(batch_labels[:,1])
+            else:
+                    
+                class1_total = np.sum(self.flat_val_labels[:,0])
+                class2_total = np.sum(self.flat_val_labels[:,1])
             
             class1_correct = np.sum(mult[:,0])
             class2_correct = np.sum(mult[:,1])
             
             print("Accuracy Results ---------------------------------------")
-            print('Healthy Accuracy: ', class1_correct/class1_total)
-            print('Healthy High: ', class1_total, ' Correct Healthy : ', class1_correct)
-            print('Cancer Accuracy: ', class2_correct/class2_total)
-            print('Cancer Total: ', class2_total, ' Correct Cancer : ', class2_correct)
-
+            print('Healthy Accuracy: ', class1_correct/class1_total, '%')
+            
+            print('Cancer Accuracy: ', class2_correct/class2_total, '%')
+            print('                  Healthy Total: ', class1_total, ' Correct Healthy : ', class1_correct)
+            print('                 Cancer Total: ', class2_total, ' Correct Cancer : ', class2_correct)
             print('*'*20)
-            
-            
-        
         
 
-batch_size = 4**4 # total per batch, must be div by 4, 16 means 4 per class or 8 per class
-fc_keep_prob = .9
-filters_layer1 = 8
-filters_layer2 = 16
-filters_layer3 = 32
+batch_size = 4**3 # total per batch, must be div by 4, 16 means 4 per class or 8 per class
+filters_layer1 = 16
+filters_layer2 = 32
+filters_layer3 = 64
 width1 = 38
 width2 = 18
 width3 = 16
-num_classes= 2 # 4 or 2 only
-num_epochs = 40
-fc_units = 50
-keep_prob=.9
+num_classes= 4 # 4 or 2 only
+num_epochs = 100
+fc_units = 100
+keep_prob=.6
 test_every_epoch = True
-x_epoch = 15
-lr = .001
-shuffle=False
+x_epoch = 10
+lr = .0001
 
 # for two class labels, 0 is healthy 1 is cancerous
 # For multi Class,
@@ -287,4 +350,4 @@ shuffle=False
 
 net1 = MSInet1(fc_units=fc_units, num_classes=num_classes, width1=width1, width2=width2, width3=width3,filters_layer1=filters_layer1, filters_layer2=filters_layer2, filters_layer3=filters_layer3, batch_size=batch_size)  
 net1.buildGraph()
-net1.train_X_epoch(lr=lr, keep_prob=keep_prob, num_epochs=num_epochs, test_every_epoch=test_every_epoch, x_epoch=x_epoch,shuffle=shuffle)
+net1.train_X_epoch(lr=lr, keep_prob=keep_prob, num_epochs=num_epochs, test_every_epoch=test_every_epoch, x_epoch=x_epoch)
