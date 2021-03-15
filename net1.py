@@ -10,6 +10,7 @@ Created on Wed Feb 17 20:55:26 2021
 import numpy as np
 import tensorflow as tf
 import tensorflow.compat.v1 as v1
+v1.disable_eager_execution()
 import time
 import os
 from load_data import H5MSI, shuffle_data
@@ -53,9 +54,10 @@ class MSInet1(object):
         
         msi_dataset.split_data()
         
-        
-        self.flat_train = msi_dataset.flat_train
-        self.flat_train_labels = msi_dataset.flat_train_labels
+        self.flat_train = msi_dataset.split_train
+        self.flat_train_labels = msi_dataset.split_train_labels
+        self.flat_val = msi_dataset.split_val
+        self.flat_val_labels =  msi_dataset.split_val_labels
         self.in_shape = self.flat_train.shape[1]
         self.fc_unit = fc_units
         self.batch_size = batch_size
@@ -124,72 +126,39 @@ class MSInet1(object):
         self.y_conv = tf.identity(fc2, name='full_op')
         
     def get_next_batch(self):
-        train_with_labels = np.zeros((self.flat_train.shape[0], self.flat_train.shape[1] + self.num_classes))
-        train_with_labels[:, 0:self.flat_train.shape[1]] = self.flat_train
-        train_with_labels[:, self.flat_train.shape[1]:self.flat_train.shape[1]+self.num_classes]= self.flat_train_labels[:, :]
-        np.random.shuffle(train_with_labels)
-        
-        self.flat_train = train_with_labels[:, 0:self.flat_train.shape[1]]
-        self.flat_train_labels = train_with_labels[:, ((self.num_classes)*-1):]
-        
-        
+        shuffled_data, shuffled_labels = shuffle_data(self.flat_train, self.flat_train_labels, self.num_classes)
+        batch_div = self.batch_size//self.num_classes
         train_batch = np.zeros((self.batch_size, self.flat_train.shape[1]))
         train_labels = np.zeros((self.batch_size, self.num_classes))
         
-        batch_div = self.batch_size//self.num_classes
-        
         for class_idx in range(0,self.num_classes):
-    
-            class_locs = np.where(self.flat_train_labels[:, class_idx]==1)[0:batch_div]
+            class_locs = np.where(shuffled_labels[:, class_idx]==1)[0:batch_div]
             assert len(class_locs[0]) >= batch_div # Need 
             class_locs = class_locs[0][0:batch_div]
-            
-
-            class_values = self.flat_train[class_locs[0:batch_div], :]
-            class_labels = self.flat_train_labels[class_locs, :]
+            class_values = shuffled_data[class_locs[0:batch_div], :]
+            class_labels = shuffled_labels[class_locs, :]
             
             train_batch[((self.batch_size//self.num_classes)*class_idx):(batch_div)*class_idx +batch_div, :] = class_values
             train_labels[((self.batch_size//self.num_classes)*class_idx):(batch_div)*class_idx +batch_div, :] = class_labels
-            
-        train_with_labels = np.zeros((train_batch.shape[0], train_batch.shape[1] + self.num_classes))
-        train_with_labels[:, 0:train_batch.shape[1]] = train_batch
-        train_with_labels[:, train_batch.shape[1]:train_batch.shape[1]+self.num_classes]= train_labels
-        np.random.shuffle(train_with_labels)
-        
-        train_batch = train_with_labels[:, 0:train_batch.shape[1]]
-        train_labels = train_with_labels[:, ((self.num_classes)*-1):]
-
-            
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
+        
         return(train_batch, train_labels)
     
     def get_test_batch(self):
-        
-        val_with_labels = np.zeros((self.flat_val.shape[0], self.flat_val.shape[1] + self.num_classes))
-        val_with_labels[:, 0:self.flat_val.shape[1]] = self.flat_val
-        val_with_labels[:, self.flat_val.shape[1]:self.flat_val.shape[1]+self.num_classes]= self.flat_val_labels[:, :]
-        np.random.shuffle(val_with_labels)
-        
-        self.flat_val = val_with_labels[:, 0:self.flat_val.shape[1]]
-        self.flat_val_labels = val_with_labels[:, ((self.num_classes)*-1):]
-        
+        batch_div = self.batch_size//self.num_classes
+        shuffled_data, shuffled_labels = shuffle_data(self.flat_val, self.flat_val_labels, self.num_classes)
         val_batch = np.zeros((self.batch_size, self.flat_val.shape[1]))
         val_labels = np.zeros((self.batch_size, self.num_classes))
         
-        batch_div = self.batch_size//self.num_classes
-        
         for class_idx in range(0,self.num_classes):
-    
-            class_locs = np.where(self.flat_val_labels[:, class_idx]==1)[0:batch_div]
-            
+            class_locs = np.where(shuffled_labels[:, class_idx]==1)[0:batch_div]
             assert len(class_locs[0]) >= batch_div # Need 
             class_locs = class_locs[0][0:batch_div]
-            class_values = self.flat_val[class_locs[0:batch_div], :]
-            class_labels = self.flat_val_labels[class_locs, :]
+            class_values = shuffled_data[class_locs[0:batch_div], :]
+            class_labels = shuffled_labels[class_locs, :]
             
             val_batch[((self.batch_size//self.num_classes)*class_idx):(batch_div)*class_idx +batch_div, :] = class_values
             val_labels[((self.batch_size//self.num_classes)*class_idx):(batch_div)*class_idx +batch_div, :] = class_labels
-        
         val_batch = np.reshape(val_batch, (val_batch.shape[0], val_batch.shape[1], 1))
 
         return(val_batch, val_labels)
@@ -208,9 +177,7 @@ class MSInet1(object):
         
         for epoch in range(num_epochs):
             epoch_loss_sum = 0
-
             train_batch, train_labels = self.get_next_batch()      
-
 
             feed_dict={self.xdev: train_batch, self.y_dev: train_labels, self.fc_keep_prob: keep_prob, self.training: True }
             [_, cross_entropy_py] = self.sess.run([train_step, cost], feed_dict=feed_dict)
@@ -338,7 +305,7 @@ width3 = 16
 num_classes= 2 # 4 or 2 only
 num_epochs = 300
 fc_units = 100
-keep_prob=.6
+keep_prob=.7
 test_every_epoch = True
 x_epoch = 10
 lr = .001 
