@@ -12,7 +12,7 @@ import tensorflow as tf
 import tensorflow.compat.v1 as v1
 import time
 import os
-from load_data import H5MSI
+from load_data import H5MSI, shuffle_data
 
 
 def weight_variable(name, shape):
@@ -46,15 +46,16 @@ class MSInet1(object):
         self.start_time = time.time()
         
         msi_dataset = H5MSI()
+        msi_dataset.flatten_data()
         
         if num_classes == 2:
             msi_dataset.two_class_data() # remove this for multilable training
-        msi_dataset.flatten_data()
+        
+        msi_dataset.split_data()
+        
         
         self.flat_train = msi_dataset.flat_train
         self.flat_train_labels = msi_dataset.flat_train_labels
-        self.flat_val = msi_dataset.flat_val
-        self.flat_val_labels = msi_dataset.flat_val_labels
         self.in_shape = self.flat_train.shape[1]
         self.fc_unit = fc_units
         self.batch_size = batch_size
@@ -140,7 +141,10 @@ class MSInet1(object):
         for class_idx in range(0,self.num_classes):
     
             class_locs = np.where(self.flat_train_labels[:, class_idx]==1)[0:batch_div]
+            assert len(class_locs[0]) >= batch_div # Need 
             class_locs = class_locs[0][0:batch_div]
+            
+
             class_values = self.flat_train[class_locs[0:batch_div], :]
             class_labels = self.flat_train_labels[class_locs, :]
             
@@ -266,7 +270,7 @@ class MSInet1(object):
             mult = batch_labels * one_hot_predictions
         else:
             mult = self.flat_val_labels * one_hot_predictions
-
+        print('')
         
         
         if self.num_classes == 4:
@@ -289,13 +293,13 @@ class MSInet1(object):
             class4_correct = np.sum(mult[:,3])
             
             print("Accuracy Results ---------------------------------------")
-            print('High Accuracy: ', class1_correct/class1_total, '%')
+            print('High Accuracy: ', (class1_correct/class1_total)*100, '%')
             
-            print('CA Accuracy: ', class2_correct/class2_total, '%')
+            print('CA Accuracy: ', (class2_correct/class2_total)*100, '%')
             
-            print('Low Accuracy: ', class3_correct/class3_total, '%')
+            print('Low Accuracy: ', (class3_correct/class3_total)*100, '%')
            
-            print('Healthy Accuracy: ', class4_correct/class4_total, '%')
+            print('Healthy Accuracy: ', (class4_correct/class4_total)*100, '%')
             print('             Total High: ', class1_total, ' Correct High: ', class1_correct)
             print('             Total CA : ', class2_total, ' Correct CA : ', class2_correct)
             print('             Total Low: ', class3_total, ' Correct Low : ', class3_correct)
@@ -316,28 +320,28 @@ class MSInet1(object):
             class2_correct = np.sum(mult[:,1])
             
             print("Accuracy Results ---------------------------------------")
-            print('Healthy Accuracy: ', class1_correct/class1_total, '%')
+            print('Healthy Accuracy: ', (class1_correct/class1_total)*100, '%')
             
-            print('Cancer Accuracy: ', class2_correct/class2_total, '%')
+            print('Cancer Accuracy: ', (class2_correct/class2_total)*100, '%')
             print('                  Healthy Total: ', class1_total, ' Correct Healthy : ', class1_correct)
             print('                 Cancer Total: ', class2_total, ' Correct Cancer : ', class2_correct)
             print('*'*20)
         
 
-batch_size = 4**3 # total per batch, must be div by 4, 16 means 4 per class or 8 per class
+batch_size = 4**4# total per batch, must be div by 4, 16 means 4 per class or 8 per class
 filters_layer1 = 16
 filters_layer2 = 32
 filters_layer3 = 64
 width1 = 38
 width2 = 18
 width3 = 16
-num_classes= 4 # 4 or 2 only
-num_epochs = 100
+num_classes= 2 # 4 or 2 only
+num_epochs = 300
 fc_units = 100
 keep_prob=.6
 test_every_epoch = True
 x_epoch = 10
-lr = .0001
+lr = .001 
 
 # for two class labels, 0 is healthy 1 is cancerous
 # For multi Class,
