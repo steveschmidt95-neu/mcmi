@@ -273,13 +273,58 @@ class H5MSI():
         else:
             assert False # havent set this up for multi class yet
         
+class SmallROI():
     
+    def __init__(self, h5_name = 'smallROI.h5'):
+        self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'OriginalData')
+        self.data_path = os.path.join(self.data_folder, h5_name)
+        self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
+        self.tumor_dict = {'Stroma': 0, 'Tumor': 1}
+        
+        f = h5py.File(self.data_path, 'r')
+        keys = list(f.keys())        
+        dset = f['msidata']
+
+        
+        self.position = dset['position']
+        self.spec = dset['spec']
+        subtissue_labels = dset['subtissue_label']
+        tissue_label = dset['tissue_label']
+        core = dset['core']
+        
+        core_number = np.zeros((core.shape[0]))
+        for row in range(0, core.shape[0]):
+            label = core[row].decode('UTF-8')
+            label = int(label[3:])
+            core_number[row] = label
+        self.core = core_number
+        
+        sub_labels = np.zeros((subtissue_labels.shape[0]))
+        for row in range(0, subtissue_labels.shape[0]):
+            label = subtissue_labels[row].decode('UTF-8')
+            sub_labels[row] = self.diagnosis_dict[label]
+        self.subtissue_labels = sub_labels
+        
+        tissue_labels_numbers = np.zeros((tissue_label.shape[0]))
+        for row in range(0, tissue_label.shape[0]):
+            label = tissue_label[row].decode('UTF-8')
+            tissue_labels_numbers[row] = self.diagnosis_dict[label]
+        self.tissue_labels = tissue_labels_numbers
+        
+        
+        
+        
+        
+        
+
+#smallROI = SmallROI()
+
 #redo_msi = MSIData()
 
-msi = H5MSI()
+#msi = H5MSI()
 #msi.histo_data(val=0)
-msi.flatten_data()
-msi.two_class_data()
-msi.split_data()
+#msi.flatten_data()
+#msi.two_class_data()
+#msi.split_data()
 
         

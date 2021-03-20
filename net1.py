@@ -303,12 +303,12 @@ width1 = 38
 width2 = 18
 width3 = 16
 num_classes= 2 # 4 or 2 only
-num_epochs = 300
+num_epochs = 1000
 fc_units = 100
-keep_prob=.7
+keep_prob=.75
 test_every_epoch = True
 x_epoch = 10
-lr = .001 
+lr = .001
 
 # for two class labels, 0 is healthy 1 is cancerous
 # For multi Class,
