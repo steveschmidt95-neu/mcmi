@@ -284,7 +284,6 @@ class SmallROI():
         f = h5py.File(self.data_path, 'r')
         keys = list(f.keys())        
         dset = f['msidata']
-
         
         self.position = dset['position']
         self.spec = dset['spec']
