@@ -310,13 +310,22 @@ class SmallROI():
             tissue_labels_numbers[row] = self.diagnosis_dict[label]
         self.tissue_labels = tissue_labels_numbers
         
+    def split_cores(self):
+
+        self.cores_list = np.unique(self.core)
+        self.core_specific_positions = {}
+        
+        for core in self.cores_list:            
+            core_positions = np.where(self.core==core)            
+            self.core_specific_positions[core] = core_positions
         
         
         
         
         
 
-#smallROI = SmallROI()
+smallROI = SmallROI()
+smallROI.split_cores()
 
 #redo_msi = MSIData()
 

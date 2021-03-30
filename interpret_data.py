@@ -13,6 +13,8 @@ import sys
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from scipy.stats import norm, truncnorm
 
 
 def average_values_plot():
@@ -27,7 +29,6 @@ def average_values_plot():
     CA = msi.flat_train[np.where(msi.flat_train_labels==msi.diagnosis_dict['CA'])]
     low = msi.flat_train[np.where(msi.flat_train_labels==msi.diagnosis_dict['low'])]
     healthy = msi.flat_train[np.where(msi.flat_train_labels==msi.diagnosis_dict['healthy'])]
-    
     
     total = high.shape[0] + CA.shape[0] + low.shape[0] + healthy.shape[0]
     y_count = [high.shape[0] ,CA.shape[0] , low.shape[0] , healthy.shape[0]]
@@ -135,8 +136,6 @@ def plot_single_distribution():
     
     fig.suptitle("Tissue Distributions", fontsize=14)    
     
-    
-
 def histo_single_feature(feature_num=9):
     smallROI = SmallROI()
     
@@ -236,7 +235,6 @@ def histo_single_feature(feature_num=9):
     ax2.text(3, 200, 'CA Count: ' + str(ca_tissue_count), fontsize=12)
     ax2.set_title('CA')
     
-
 def histo_single_tissue(feature_num=9):
     smallROI = SmallROI()
     
@@ -277,8 +275,7 @@ def histo_single_tissue(feature_num=9):
     
     single_ca_tissue_healthy_count = single_ca_tissue_healthy_values.shape[0]    
     single_ca_tissue_ca_count = single_ca_tissue_ca_values.shape[0]
-    
-    
+
     bins = 10
     
     
@@ -289,11 +286,11 @@ def histo_single_tissue(feature_num=9):
     fig.suptitle('Single Tissue Distributions')
     
     
-    ax1.hist(single_ca_tissue_values, bins=bins, range = (0,7))
+    ax1.hist(single_ca_tissue_values, bins=bins, range = (0,10))
     ax1.text(2, 10, 'Total Count: ' + str(single_ca_tissue_count), fontsize=12)
     ax1.set_title('Single Tissue Values')
     
-    ax2.hist(single_ca_tissue_ca_values, bins=bins, range = (0,7))
+    ax2.hist(single_ca_tissue_ca_values, bins=bins, range = (0,10))
     ax2.text(3, 10, 'CA Count: ' + str(single_ca_tissue_ca_count), fontsize=12)
     ax2.set_title('CA')
     
@@ -305,28 +302,166 @@ def histo_single_tissue(feature_num=9):
     fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, tight_layout=True)  
     fig.suptitle('Single Tissue Distributions')
     
-    ax1.hist(single_ca_tissue_values, bins=bins, range = (0,7))
+    ax1.hist(single_ca_tissue_values, bins=bins, range = (0,10))
     ax1.text(2, 10, 'Total Count: ' + str(single_ca_tissue_count), fontsize=12)
     ax1.set_title('Single Tissue Values')
     
-    ax2.hist(single_ca_tissue_healthy_values, bins=bins, range = (0,7))
+    ax2.hist(single_ca_tissue_healthy_values, bins=bins, range = (0,10))
     ax2.text(2, 10, 'Healthy Count: ' + str(single_ca_tissue_healthy_count), fontsize=12)
     ax2.set_title('Healthy')
     
+    
+    healthy_locations = np.where(smallROI.tissue_labels==smallROI.diagnosis_dict['healthy'])    
+    healthy_tissue_values = smallROI.spec[healthy_locations]
+    healthy_tissue_feature_valeus = healthy_tissue_values[:, feature_num]
+    
+    print('Mean Healthy: ', np.mean(healthy_tissue_feature_valeus))
+    print('Mean CA: ', np.mean(single_ca_tissue_ca_values))
+    print(single_ca_tissue_ca_values)
     plt.show()
     
     
+def pdf_single_tissue(feature_num=9):
+    smallROI = SmallROI()
+    
+    healthy_locations = np.where(smallROI.tissue_labels==smallROI.diagnosis_dict['healthy'])
+    ca_locations = np.where(smallROI.tissue_labels==smallROI.diagnosis_dict['CA']) 
+    
+    healthy_tissue_values = smallROI.spec[healthy_locations]
+    ca_tissue_values = smallROI.spec[ca_locations]
+    healthy_tissue_values = healthy_tissue_values[:, feature_num]
+    
+    ca_cores = np.unique(smallROI.core[ca_locations])
+    core_chosen = ca_cores[7]
+    
+    # 1, 7,5, 9, 10 is good ish for CA
+    
+    single_ca_tissue_locations = np.where(smallROI.core==core_chosen)# choose first tissue available
+    single_ca_tissue_count = single_ca_tissue_locations[0].shape[0]
+    
+    print('Total Values Count: ', single_ca_tissue_count)
+    print('Core Number: ', core_chosen)
+    
+    single_ca_tissue_values = smallROI.spec[single_ca_tissue_locations]
+    single_ca_tissue_values = single_ca_tissue_values[:, feature_num]
+    
+    single_ca_tissue_healthy_locations = np.where(smallROI.subtissue_labels[single_ca_tissue_locations] == smallROI.diagnosis_dict['healthy'])  
+    single_ca_tissue_healthy_locations = single_ca_tissue_locations[0][single_ca_tissue_healthy_locations]
+    single_ca_tissue_healthy_values = smallROI.spec[single_ca_tissue_healthy_locations]
+    single_ca_tissue_healthy_values = single_ca_tissue_healthy_values[:, feature_num]
+    
+    single_ca_tissue_ca_locations = np.where(smallROI.subtissue_labels[single_ca_tissue_locations] == smallROI.diagnosis_dict['CA'])  
+    single_ca_tissue_ca_locations = single_ca_tissue_locations[0][single_ca_tissue_ca_locations]
+    single_ca_tissue_ca_values = smallROI.spec[single_ca_tissue_ca_locations]
+    single_ca_tissue_ca_values = single_ca_tissue_ca_values[:, feature_num]
+    
+    single_ca_tissue_healthy_count = single_ca_tissue_healthy_values.shape[0]    
+    single_ca_tissue_ca_count = single_ca_tissue_ca_values.shape[0]
+    
+    
+    #fig, ax = plt.subplots(1, 1)
+    
+    
+    low = 0
+    upp = np.inf
+    
+    mean, sd = norm.fit(healthy_tissue_values)
+    
+    #trunc_norm=truncnorm(a=low, b=upp, loc=mean, scale=sd)
+    
+    trunc_norm = truncnorm((low - mean) / sd, (upp - mean) / sd, loc=mean, scale=sd)
+    
+    #x = np.linspace(truncnorm.ppf(0.01, low, upp),truncnorm.ppf(0.99, low, upp), 100)
+    x = np.linspace(0, 8, 100)
+    plt.plot(x, trunc_norm.pdf(x), 'k-', lw=2, label='frozen pdf')
+    
+    plt.hist(single_ca_tissue_ca_values, bins=11, range = (0,7), density=True)
+    plt.title('Ca Values Against Truncated Normal')
+    
+    
+    plt.plot(x, trunc_norm.pdf(x), 'k-', lw=2, label='frozen pdf')
+    plt.hist(single_ca_tissue_ca_values, bins=11, range = (0,7), density=True)
+    plt.title('Ca Values Against Truncated Normal')
     
     
     
     
     
+def single_tissue_select_data_one_feature(feature_num=9, k=10):
+    smallROI = SmallROI()
+    
+    healthy_locations = np.where(smallROI.tissue_labels==smallROI.diagnosis_dict['healthy'])
+    ca_locations = np.where(smallROI.tissue_labels==smallROI.diagnosis_dict['CA']) 
+    
+    healthy_tissue_values = smallROI.spec[healthy_locations]
+    ca_tissue_values = smallROI.spec[ca_locations]
+    healthy_tissue_values = healthy_tissue_values[:, feature_num]
+    
+    ca_cores = np.unique(smallROI.core[ca_locations])
+    core_chosen = ca_cores[7]
+    
+    # 1, 7,5, 9, 10 is good ish for CA
+    
+    single_ca_tissue_locations = np.where(smallROI.core==core_chosen)# choose first tissue available
+    single_ca_tissue_count = single_ca_tissue_locations[0].shape[0]
+    
+    print('Total Values Count: ', single_ca_tissue_count)
+    print('Core Number: ', core_chosen)
+    
+    single_ca_tissue_values = smallROI.spec[single_ca_tissue_locations]
+    single_ca_tissue_values = single_ca_tissue_values[:, feature_num]
+    single_ca_tissue_labels = smallROI.subtissue_labels[single_ca_tissue_locations]
+    
+    low = 0
+    upp = np.inf
+    
+    mean, sd = norm.fit(healthy_tissue_values)
+    trunc_norm = truncnorm((low - mean) / sd, (upp - mean) / sd, loc=mean, scale=sd)
+    
+    pdf_values = trunc_norm.pdf(single_ca_tissue_values)
+    idx_sorted_pdf = np.argsort(pdf_values)
+    pdf_sorted = pdf_values[idx_sorted_pdf]
+    tissue_pdf_sorted_locs= single_ca_tissue_locations[0][idx_sorted_pdf]
+    k_labels = smallROI.subtissue_labels[tissue_pdf_sorted_locs]
+    
+    
+    print(k_labels)
+    assert False
+    
+    ca_labels_locs = np.where(k_labels==2)
+    healthy_labels = np.where(k_labels ==0)
+    
+    print()
+    
+    ca_labels_pdf_values = pdf_sorted[ca_labels_locs]
+    healthy_labels_pdf_values = pdf_sorted[healthy_labels]
+    
+    print(pdf_sorted)
+    print(k_labels)
+    
+    fig, ax = plt.subplots()
+    
+    
+    scatter = ax.scatter(healthy_labels_pdf_values, np.ones((healthy_labels_pdf_values.shape[0])), c='blue', marker='|')
+    scatter = ax.scatter(ca_labels_pdf_values, np.zeros((ca_labels_pdf_values.shape[0])), c='red', marker='|')
+    
+    red_patch = mpatches.Patch(color='red', label='CA')
+    blue_patch = mpatches.Patch(color='blue', label='THealthy')
+    
+    ax.legend(handles=[red_patch, blue_patch])
+    
+    
+    
+    
+   
+    
+#single_tissue_select_data_one_feature(feature_num=9)    
 
 
 #plot_single_distribution()
 #histo_single_feature(feature_num=9)
-histo_single_tissue(feature_num=9)
-
+#histo_single_tissue(feature_num=208)
+pdf_single_tissue(feature_num=208)
 
     
     
