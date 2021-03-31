@@ -124,7 +124,7 @@ class MSInet1(object):
         
         self.sess.run(v1.global_variables_initializer())
         
-    def single_tissue_compute_params(self, batch_input, batch_labels, lr = .001, keep_prob=.8):
+    def single_core_compute_params(self, batch_input, batch_labels, keep_prob=.8):
         
         with self.graph.as_default():
             set_session(self.sess)
@@ -132,6 +132,15 @@ class MSInet1(object):
             [_, cross_entropy_py] = self.sess.run([self.train_step, self.cost], feed_dict=feed_dict)
                            
             return(cross_entropy_py)
+        
+    def single_core_predict_labels(self, batch_input, lr = .001, keep_prob=.8):
+        
+        with self.graph.as_default():
+            set_session(self.sess)
+            feed_dict={self.xdev: batch_input, self.fc_keep_prob: keep_prob, self.training: False }
+            preds = self.sess.run(v1.nn.softmax(self.y_conv), feed_dict)
+                           
+            return(preds)
     
 
 
