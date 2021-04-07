@@ -25,7 +25,6 @@ def single_to_one_hot(labels, num_classes):
     for hot_class in range(0, num_classes):
         class_locations = np.where(labels == hot_class)
         one_hot_labels[class_locations, hot_class] = 1
-        
     return(one_hot_labels)
 
 def one_hot_to_single_label(labels, num_classes):
@@ -41,7 +40,7 @@ class MIL():
         self.smallROI.split_cores()
         
         # Use this for a smaller training set
-        self.smallROI.cores_list = [7, 10,6, 4,]
+        #self.smallROI.cores_list = [7, 10,6, 4,]
         
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.batch_size = batch_size
@@ -144,7 +143,6 @@ class MIL():
         
         for balance_class in balance_classes.keys():
             k= int(self.total_healthy_subtissue - total_tissue_count[balance_class])
-            print(k, ' Needed for  ', balance_class)
             
             # no need to balance classes with enough labels
             if k <= 0:
@@ -156,7 +154,7 @@ class MIL():
                 
             # make sure you have enough labels to fit into batch
             # Double array repeatdly until its large enough
-            
+        
             # make sure you have enough from the request
             while (k >= k_count):
                 if k_count == 1:
@@ -184,6 +182,9 @@ class MIL():
                 
                 k_count = doubled_array.shape[0]
                 k_highest = doubled_array
+                
+            k_highest = k_highest[0:k, :]
+            k_count = k_highest.shape[0]
             
             print('Balancing ', balance_class, ' By ', k_count, ' Inputs')
             batch_idx = 0
@@ -251,7 +252,7 @@ class MIL():
             return(k_highest_values)
         
     
-    def compute_params_all_cores(self):
+    def compute_params_all_cores(self, epoch, balance_training=False, balance_every_x = 5):
         
         total_tissue_count = {'high': 0, 'CA': 0, 'low': 0, 'healthy': 0}
         
@@ -266,8 +267,9 @@ class MIL():
             epoch_cost+=core_cost
          
         print('Initial Pass Tissue Count: ', total_tissue_count)
-        additional_cost = self.balance_training(total_tissue_count)
-        epoch_cost+=additional_cost
+        if balance_training and (epoch % balance_every_x == 0):
+            additional_cost = self.balance_training(total_tissue_count)
+            epoch_cost+=additional_cost
         return(epoch_cost)
             
     def _update_predicted_labels_single_core(self, core):
@@ -317,17 +319,19 @@ class MIL():
             
         return(labels_changed)
     
-    def cnn_X_epoch(self, x,test_every_x = 3):
-        for x in range(1, x):
-            print("Epoch ", x)
-            cost = self.compute_params_all_cores()
-            print('    Cost: ', cost)
+    def cnn_X_epoch(self, x,test_every_x = 3, balance_classes=False):
+        for epoch in range(1, x):
+            print("Epoch ", epoch)
+            cost = self.compute_params_all_cores(epoch, balance_training=balance_classes)
+            print('    Cost: ', cost)            
             labels_changed = self.impute_labels_all_cores()
             print("    Labels Changed: ", labels_changed)
             self.enforce_label_constraints()
-            
             if x % test_every_x == 0:
                 self.eval_all_cores()
+                
+            
+
                 
     # Impute the new labels and enforce label constraints
     def enforce_label_constraints(self, k_large_elements = 3):
@@ -387,6 +391,8 @@ class MIL():
         total_low = 0
         total_neg_all_cores = 0
         for core in self.smallROI.cores_list:
+            if self.core_true_label[core] == self.diagnosis_dict['healthy']:
+                continue
             tp, tn, total_pos, total_neg, core_label = self.eval_single_core_direct_labels(core)
             
             if core_label == self.diagnosis_dict['healthy']:
@@ -443,9 +449,10 @@ class MIL():
         
     
 
-batch_size = 8
+batch_size = 14
+balance_classes=True
 
-MIL = MIL(fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=10, filters_layer2=20, filters_layer3=40, batch_size=batch_size, lr=.001, keep_prob=.8)
+MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=.001, keep_prob=.99)
 MIL.init_MSI()
-MIL.cnn_X_epoch(150)
+MIL.cnn_X_epoch(150,balance_classes=balance_classes)
 
