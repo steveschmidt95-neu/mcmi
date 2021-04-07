@@ -129,9 +129,9 @@ class MSInet1(object):
         with self.graph.as_default():
             set_session(self.sess)
             feed_dict={self.xdev: batch_input, self.y_dev: batch_labels, self.fc_keep_prob: keep_prob, self.training: True }
-            [_, cross_entropy_py] = self.sess.run([self.train_step, self.cost], feed_dict=feed_dict)
+            [_, cross_entropy_py, preds] = self.sess.run([self.train_step, self.cost, v1.nn.softmax(self.y_conv)], feed_dict=feed_dict)
                            
-            return(cross_entropy_py)
+            return(cross_entropy_py, preds)
         
     def single_core_predict_labels(self, batch_input, lr = .001, keep_prob=.8):
         
