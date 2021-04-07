@@ -27,7 +27,7 @@ def single_to_one_hot(labels, num_classes):
         one_hot_labels[class_locations, hot_class] = 1
     return(one_hot_labels)
 
-def one_hot_to_single_label(labels, num_classes):
+def one_hot_probability_to_single_label(labels, num_classes):
     argmax_labels = np.argmax(labels, axis=1)
     return(argmax_labels)
 
@@ -40,7 +40,7 @@ class MIL():
         self.smallROI.split_cores()
         
         # Use this for a smaller training set
-        #self.smallROI.cores_list = [7, 10,6, 4,]
+        #kself.smallROI.cores_list = [7, 10,6, 4,]
         
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.batch_size = batch_size
@@ -272,7 +272,7 @@ class MIL():
             epoch_cost+=additional_cost
         return(epoch_cost)
             
-    def _update_predicted_labels_single_core(self, core):
+    def _update_predicted_labels_single_core(self, core, two_class_per_core = True,balance_every_x=5):
         batch_idx = 0
         labels_changed = 0
         total_input_vals = self.core_probability_labels[core].shape[0]
@@ -285,7 +285,10 @@ class MIL():
             previous_labels = self.core_pred_sub_labels[core][total_input_vals-self.batch_size:]
 
             preds = self.net1.single_core_predict_labels(train_batch, keep_prob=self.keep_prob)
-            new_imputed_labels = one_hot_to_single_label(preds, self.num_classes)
+            new_imputed_labels = one_hot_probability_to_single_label(preds, self.num_classes)
+            
+            if two_class_per_core:
+                new_imputed_labels[np.where(new_imputed_labels!=self.diagnosis_dict['healthy'])] = self.core_true_label[core]
             self.core_probability_labels[core][total_input_vals-self.batch_size:] = preds
             
             diffs = len(np.where(previous_labels!=new_imputed_labels)[0])
@@ -301,7 +304,9 @@ class MIL():
         train_labels = single_to_one_hot(train_labels, self.num_classes)
         
         preds = self.net1.single_core_predict_labels(train_batch, keep_prob=self.keep_prob)
-        new_imputed_labels = one_hot_to_single_label(preds, self.num_classes)
+        new_imputed_labels = one_hot_probability_to_single_label(preds, self.num_classes)
+        if two_class_per_core:
+            new_imputed_labels[np.where(new_imputed_labels!=self.diagnosis_dict['healthy'])] = self.core_true_label[core]
         self.core_probability_labels[core][total_input_vals-self.batch_size:] = preds
         
         diffs = len(np.where(previous_labels!=new_imputed_labels)[0])
@@ -310,28 +315,30 @@ class MIL():
         
         return(labels_changed)
     
-    def impute_labels_all_cores(self):
+    def impute_labels_all_cores(self,two_class_per_core=True):
                 
         labels_changed = 0
         for core in self.smallROI.cores_list:
-            core_labels_changed = self._update_predicted_labels_single_core(core)
+            # dont impute healthy cores
+            if self.core_true_label[core] == self.diagnosis_dict['healthy']:
+                continue
+            core_labels_changed = self._update_predicted_labels_single_core(core,two_class_per_core)
             labels_changed+=core_labels_changed
-            
         return(labels_changed)
     
-    def cnn_X_epoch(self, x,test_every_x = 3, balance_classes=False):
+    def cnn_X_epoch(self, x, balance_classes=False, reset_healthy_count=True,balance_every_x=5,test_every_x=5, two_class_per_core=True):
         for epoch in range(1, x):
             print("Epoch ", epoch)
-            cost = self.compute_params_all_cores(epoch, balance_training=balance_classes)
+            cost = self.compute_params_all_cores(epoch, balance_training=balance_classes, balance_every_x=balance_every_x)
             print('    Cost: ', cost)            
-            labels_changed = self.impute_labels_all_cores()
+            labels_changed = self.impute_labels_all_cores(two_class_per_core=two_class_per_core)
             print("    Labels Changed: ", labels_changed)
             self.enforce_label_constraints()
-            if x % test_every_x == 0:
+            if epoch % test_every_x == 0:
                 self.eval_all_cores()
+            if reset_healthy_count:
+                self.reset_healthy_subtissue_input_count()
                 
-            
-
                 
     # Impute the new labels and enforce label constraints
     def enforce_label_constraints(self, k_large_elements = 3):
@@ -397,7 +404,7 @@ class MIL():
             
             if core_label == self.diagnosis_dict['healthy']:
                 tn_all_cores += tn
-                total_neg_all_cores += total_neg
+                total_neg_all_cores += total_negk
                 
             elif core_label == self.diagnosis_dict['high']:
                 tp_high += tp
@@ -449,10 +456,16 @@ class MIL():
         
     
 
-batch_size = 14
-balance_classes=True
+batch_size = 12
+balance_classes=True # train on same amount of each class per epoch
+balance_every_x = 1
+two_class_per_core=True # make labels in each core only be healthy or the core label
+reset_healthy_count = True # include healthy subtissue in non-healthy cores to count used for balancing classes
+
+test_every_x = 1
+num_epochs=150
 
 MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=.001, keep_prob=.99)
 MIL.init_MSI()
-MIL.cnn_X_epoch(150,balance_classes=balance_classes)
+MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core)
 
