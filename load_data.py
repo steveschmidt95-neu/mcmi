@@ -324,8 +324,8 @@ class SmallROI():
         
         
 
-smallROI = SmallROI()
-smallROI.split_cores()
+#smallROI = SmallROI()
+#smallROI.split_cores()
 
 #redo_msi = MSIData()
 

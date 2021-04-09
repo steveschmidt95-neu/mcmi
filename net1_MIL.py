@@ -119,7 +119,7 @@ class MSInet1(object):
         
         cross_entropy = v1.nn.softmax_cross_entropy_with_logits_v2(labels=self.y_dev, logits=self.y_conv)
         cross_entropy_sum = v1.reduce_sum(cross_entropy)
-        self.train_step = v1.train.AdamOptimizer(learning_rate = self.lr).minimize(cross_entropy_sum)
+        self.train_step = v1.train.GradientDescentOptimizer(learning_rate = self.lr).minimize(cross_entropy_sum)
         self.cost = cross_entropy_sum
         
         self.sess.run(v1.global_variables_initializer())
