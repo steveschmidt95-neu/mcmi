@@ -15,6 +15,8 @@ import time
 import os
 from load_data import H5MSI, SmallROI
 from net1_MIL import MSInet1
+import matplotlib.pyplot as plt
+import matplotlib
 
 
 
@@ -82,6 +84,8 @@ class MIL():
         self.core_true_label = {}
         self.core_pred_sub_labels = {}
         self.core_probability_labels = {}
+        self.positions = {}
+
         
         for core in self.smallROI.cores_list:
             core_positions = self.smallROI.core_specific_positions[core]
@@ -90,6 +94,8 @@ class MIL():
             self.core_true_label[core] = int(self.smallROI.tissue_labels[core_positions][0])
             self.core_pred_sub_labels[core] = self.smallROI.tissue_labels[core_positions].astype(int)
             self.core_probability_labels[core] = np.zeros((self.smallROI.tissue_labels[core_positions].shape[0], self.num_classes))
+            self.positions[core] = self.smallROI.position[core_positions].astype(int)
+
             
         self.total_healthy_subtissue = self.count_healthy_locs_core_only()
     
@@ -540,7 +546,55 @@ class MIL():
         print('Balanced Accuracy: ', balanced_accuracy)
         print('  - Resuming Training  - ')
    
+    def viz_single_core_pred(self, core):
+        positions = self.positions[core]
+        
+        xmax = np.max(positions[:, 0])
+        xmin = np.min(positions[:, 0])
+        ymax = np.max(positions[:, 1])
+        ymin = np.min(positions[:, 1])
+        
+        print('Xmax: ', xmax)
+        print('Xmin: ', xmin)
+        print('Ymax: ', ymax)
+        print('Ymin: ', ymin)
+        
+        image_array = np.zeros((xmax-xmin+1, ymax-ymin+1))
+        image_array[:] = 4
+        print(image_array.shape)
+        print("Core Label: ",  self.core_true_label[core])
+        
+        cmap = matplotlib.colors.ListedColormap(['white', 'red', 'blue', 'yellow', 'black'])
+        bounds = [0, 1, 2, 3, 4,5]
+        norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
+        
+        for location in range(0, self.core_pred_sub_labels[core].shape[0]):
+            label = self.core_pred_sub_labels[core][location]
+            xloc = self.positions[core][location][0]- xmin
+            yloc = self.positions[core][location][1] - ymin
+            
+            image_array[xloc, yloc] = label
+        
+        ax = plt.gca()
+        ax.axes.xaxis.set_visible(False)
+        ax.axes.yaxis.set_visible(False)
+        plt.grid(True)
+        plt.imshow(image_array, interpolation='nearest',cmap = cmap,norm=norm)
 
+        title = "Core Number: " + str(core)  + " Label: " +  self.diagnosis_dict_reverse[self.core_true_label[core]]
+        print(title)
+        plt.title(title)
+        plt.colorbar(cmap=cmap,norm=norm,boundaries=bounds,ticks=[0,1,2, 3])
+        filename = 'Images/Pred'+ str(int(core)) + '.png'
+        print(filename)
+        
+        plt.savefig(filename, pad_inches=0)
+        plt.clf()
+    
+    def viz_single_core_pred(self):
+        for core in self.smallROI.cores_list:
+            print(core)
+            self.viz_single_core_true(core)
     
 
 batch_size = 4
@@ -554,9 +608,9 @@ small_train = False
 
 test_every_x = 1
 num_epochs=150
-lr=.0005
+lr=.001
 
-MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,small_train=small_train)
-MIL.init_MSI()
-MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core, train_non_healthy_only=train_non_healthy_only,enforce_healthy_constraint=enforce_healthy_constraint)
+#MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,small_train=small_train)
+#MIL.init_MSI()
+#MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core, train_non_healthy_only=train_non_healthy_only,enforce_healthy_constraint=enforce_healthy_constraint)
 
