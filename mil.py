@@ -34,13 +34,14 @@ def one_hot_probability_to_single_label(labels, num_classes):
 
 class MIL():
     
-    def __init__(self, fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=12, filters_layer2=24, filters_layer3=48, batch_size=4, lr=.001, keep_prob=.8):
+    def __init__(self, fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=12, filters_layer2=24, filters_layer3=48, batch_size=4, lr=.001, keep_prob=.8, small_train=True):
         
         self.smallROI = SmallROI()
         self.smallROI.split_cores()
         
         # Use this for a smaller training set
-        self.smallROI.cores_list = [7, 10,6, 4,]
+        if small_train:
+            self.smallROI.cores_list = [7, 10,6, 4,]
         
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.batch_size = batch_size
@@ -174,7 +175,6 @@ class MIL():
             tissue_count['CA'] += np.sum(train_labels[:, self.diagnosis_dict['CA']])
             tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
 
-            
             cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
             total_cost+=cost
             self.core_probability_labels[core][batch_idx:batch_idx+self.batch_size] = preds
@@ -410,7 +410,7 @@ class MIL():
             print('    Cost: ', cost)            
             labels_changed = self.impute_labels_all_cores(two_class_per_core=two_class_per_core)
             print("    Labels Changed: ", labels_changed)
-            self.enforce_label_constraints(enforce_healthy_constraint=enforce_healthy_constraint())
+            self.enforce_label_constraints(enforce_healthy_constraint=enforce_healthy_constraint)
             if epoch % test_every_x == 0:
                 self.eval_all_cores()
             if reset_healthy_count:
@@ -435,7 +435,7 @@ class MIL():
                     self.core_pred_sub_labels[core][k_max_element_lcoations] = core_label
                     
                 if enforce_healthy_constraint:
-                    healthy_locations = np.where(self.core_pred_sub_labels[core] == self.diagnosis_dict['heatlhy'])
+                    healthy_locations = np.where(self.core_pred_sub_labels[core] == self.diagnosis_dict['healthy'])
                     healthy_count = healthy_locations[0].shape[0]
 
                     if healthy_count <k_large_elements:
@@ -544,18 +544,19 @@ class MIL():
     
 
 batch_size = 4
-balance_classes=True # train on same amount of each class per epoch
-balance_every_x = 1
+balance_classes=True # train on same amount of eachk class per epoch
+balance_every_x = 2
 two_class_per_core=True # make labels in each core only be healthy or the core label
 reset_healthy_count = False # include healthy subtissue in non-healthy cores to count used for balancing classes
 train_non_healthy_only = False # train on only the non-healthy assigned locations in non-healthy tissues
 enforce_healthy_constraint = True
+small_train = False
 
 test_every_x = 1
 num_epochs=150
 lr=.0005
 
-MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99)
+MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,small_train=small_train)
 MIL.init_MSI()
 MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core, train_non_healthy_only=train_non_healthy_only,enforce_healthy_constraint=enforce_healthy_constraint)
 
