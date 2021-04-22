@@ -44,8 +44,12 @@ class MIL():
         # Use this for a smaller training set
         if small_train:
             self.smallROI.cores_list = [7, 10,6, 4,]
+            #self.smallROI.cores_list = [7, 10,6, 4, 9, 11,33, 34]
+            
         
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
+        self.diagnosis_dict_reverse = {1: 'high', 2: 'CA', 3: 'low', 0:'healthy'}
+
         self.batch_size = batch_size
         self.lr = lr
         self.keep_prob = keep_prob
@@ -56,6 +60,7 @@ class MIL():
         self.sample_shape = int(self.smallROI.spec[0].shape[0])
         self.net1 = MSInet1(data_shape = self.sample_shape, fc_units=fc_units, num_classes=num_classes, width1=width1, width2=width2, width3=width3, filters_layer1=filters_layer1, filters_layer2=filters_layer2, filters_layer3=filters_layer3, batch_size=batch_size,lr=lr)
         self.net1.build_graph()
+        self.highest_score = .755
     
     # count the number of subtissue labels that will be fed into the training for helathy tissue in fiorst epoch
     def count_healthy_locs_core_only(self):
@@ -544,6 +549,11 @@ class MIL():
         
         balanced_accuracy = (neg_accuracy  * .25) + (high_accuracy*.25) + (ca_accuracy*.25) + (low_accuracy*.25)
         print('Balanced Accuracy: ', balanced_accuracy)
+        
+        if balanced_accuracy > self.highest_score:
+            self.highest_score = balanced_accuracy
+            self.save_ims_all_cores()
+        
         print('  - Resuming Training  - ')
    
     def viz_single_core_pred(self, core):
@@ -553,16 +563,8 @@ class MIL():
         xmin = np.min(positions[:, 0])
         ymax = np.max(positions[:, 1])
         ymin = np.min(positions[:, 1])
-        
-        print('Xmax: ', xmax)
-        print('Xmin: ', xmin)
-        print('Ymax: ', ymax)
-        print('Ymin: ', ymin)
-        
         image_array = np.zeros((xmax-xmin+1, ymax-ymin+1))
         image_array[:] = 4
-        print(image_array.shape)
-        print("Core Label: ",  self.core_true_label[core])
         
         cmap = matplotlib.colors.ListedColormap(['white', 'red', 'blue', 'yellow', 'black'])
         bounds = [0, 1, 2, 3, 4,5]
@@ -591,26 +593,26 @@ class MIL():
         plt.savefig(filename, pad_inches=0)
         plt.clf()
     
-    def viz_single_core_pred(self):
+    def save_ims_all_cores(self):
         for core in self.smallROI.cores_list:
-            print(core)
-            self.viz_single_core_true(core)
+
+            self.viz_single_core_pred(core)
     
 
-batch_size = 4
+batch_size = 8
 balance_classes=True # train on same amount of eachk class per epoch
-balance_every_x = 2
+balance_every_x = 1
 two_class_per_core=True # make labels in each core only be healthy or the core label
 reset_healthy_count = False # include healthy subtissue in non-healthy cores to count used for balancing classes
 train_non_healthy_only = False # train on only the non-healthy assigned locations in non-healthy tissues
-enforce_healthy_constraint = True
-small_train = False
+enforce_healthy_constraint = True # Enforce the same constraint for healthy tissus on non-healthy cores
+small_train = True
 
 test_every_x = 1
 num_epochs=150
-lr=.001
+lr=.0005
 
-#MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,small_train=small_train)
-#MIL.init_MSI()
-#MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core, train_non_healthy_only=train_non_healthy_only,enforce_healthy_constraint=enforce_healthy_constraint)
+MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,small_train=small_train)
+MIL.init_MSI()
+MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core, train_non_healthy_only=train_non_healthy_only,enforce_healthy_constraint=enforce_healthy_constraint)
 

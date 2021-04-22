@@ -68,6 +68,7 @@ class MSInet1(object):
         self.graph = v1.get_default_graph()
         self.lr=lr
         
+        
         print("Input Shape: ", self.xdev.shape)
         
     

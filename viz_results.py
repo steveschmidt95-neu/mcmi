@@ -151,17 +151,6 @@ class MIL_Data_Only():
             print(core)
             self.viz_single_core_true(core)
 
-    
-
-            
-
-        
-        
-    
-        
-        
-        
-
 
     
     
