@@ -60,7 +60,7 @@ class MIL():
         self.sample_shape = int(self.smallROI.spec[0].shape[0])
         self.net1 = MSInet1(data_shape = self.sample_shape, fc_units=fc_units, num_classes=num_classes, width1=width1, width2=width2, width3=width3, filters_layer1=filters_layer1, filters_layer2=filters_layer2, filters_layer3=filters_layer3, batch_size=batch_size,lr=lr)
         self.net1.build_graph()
-        self.highest_score = .755
+        self.highest_score = .75
     
     # count the number of subtissue labels that will be fed into the training for helathy tissue in fiorst epoch
     def count_healthy_locs_core_only(self):
@@ -566,7 +566,7 @@ class MIL():
         image_array = np.zeros((xmax-xmin+1, ymax-ymin+1))
         image_array[:] = 4
         
-        cmap = matplotlib.colors.ListedColormap(['white', 'red', 'blue', 'yellow', 'black'])
+        cmap = matplotlib.colors.ListedColormap(['black', 'red', 'blue', 'yellow', 'white'])
         bounds = [0, 1, 2, 3, 4,5]
         norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
         
@@ -599,7 +599,7 @@ class MIL():
             self.viz_single_core_pred(core)
     
 
-batch_size = 8
+batch_size = 6
 balance_classes=True # train on same amount of eachk class per epoch
 balance_every_x = 1
 two_class_per_core=True # make labels in each core only be healthy or the core label
@@ -612,7 +612,7 @@ test_every_x = 1
 num_epochs=150
 lr=.0005
 
-MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,small_train=small_train)
-MIL.init_MSI()
-MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core, train_non_healthy_only=train_non_healthy_only,enforce_healthy_constraint=enforce_healthy_constraint)
+#MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=20, filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,small_train=small_train)
+#MIL.init_MSI()
+#MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, balance_every_x=balance_every_x, test_every_x=test_every_x,two_class_per_core=two_class_per_core, train_non_healthy_only=train_non_healthy_only,enforce_healthy_constraint=enforce_healthy_constraint)
 

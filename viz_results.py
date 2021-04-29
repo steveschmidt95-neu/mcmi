@@ -74,8 +74,6 @@ class SmallROIViz():
 
 
 class MIL_Data_Only():
-    
-    
    def  __init__(self, num_classes=4):
         self.smallROI = SmallROIViz()
         self.smallROI.split_cores()
@@ -119,7 +117,8 @@ class MIL_Data_Only():
         print(image_array.shape)
         print("Core Label: ",  self.core_true_label[core])
         
-        cmap = matplotlib.colors.ListedColormap(['white', 'red', 'blue', 'yellow', 'black'])
+        cmap = matplotlib.colors.ListedColormap(['black', 'red', 'blue', 'yellow', 'white'])
+        color_bar_labels = ['healthy', 'CA', 'low', 'high']
         bounds = [0, 1, 2, 3, 4,5]
         norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
         
@@ -139,7 +138,11 @@ class MIL_Data_Only():
         title = "Core Number: " + str(core)  + " Label: " +  self.diagnosis_dict_reverse[self.core_true_label[core]]
         print(title)
         plt.title(title)
-        plt.colorbar(cmap=cmap,norm=norm,boundaries=bounds,ticks=[0,1,2, 3])
+        cbar = plt.colorbar(cmap=cmap,norm=norm,boundaries=bounds,ticks=[0,1,2,3])
+        
+        for j, clabel in enumerate(color_bar_labels):
+            #cbar.ax.text(.5, (2 * j + 1)/2, clabel, ha='center', va='center')
+            cbar.ax.text(7,  (2 * j + 1)/2, clabel, va='center')
         filename = 'Images/True'+ str(int(core)) + '.png'
         print(filename)
         
@@ -154,7 +157,7 @@ class MIL_Data_Only():
 
     
     
-num_classes = 4
+#num_classes = 4
 
-mil_data = MIL_Data_Only(num_classes=4)
-mil_data.save_im_all_cores()
+#mil_data = MIL_Data_Only(num_classes=4)
+#mil_data.save_im_all_cores()

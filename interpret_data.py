@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from scipy.stats import norm, truncnorm
+from viz_results import MIL_Data_Only
 
 
 def average_values_plot():
@@ -450,18 +451,74 @@ def single_tissue_select_data_one_feature(feature_num=9, k=10):
     
     ax.legend(handles=[red_patch, blue_patch])
     
+
+def plot_class_imbalance_subtissue():
+    milData = MIL_Data_Only()
+    
+    data_count = [0, 0, 0, 0]
+    
+    for core in milData.smallROI.cores_list:
+        print('Core: ', core)
+        core_sub = milData.core_true_sub_labels[core]
+        for loc in range(0, core_sub.shape[0]):
+            sub_val = int(core_sub[loc])
+            data_count[sub_val] +=1
+    
+    print("Core Count: ", len(milData.smallROI.cores_list))
+    x_axis = [0, 1, 2, 3]
+    labels = ['healthy', 'high', 'CA', 'low']
+    print(data_count)
+    
+    fig, ax = plt.subplots()
+    
+    ax.bar(x_axis, data_count)
+    ax.set_ylabel('Subtissue Locations Count')
+    ax.set_title('Dataset Subtissue Distribution')
+    ax.set_xticks(x_axis)
+    ax.set_xticklabels(labels)
+    
+    plt.show()
+    
+def plot_class_imbalance_tissue():
+    milData = MIL_Data_Only()
+    data_count = [0, 0, 0, 0]
+    
+    for core in milData.smallROI.cores_list:
+        print('Core: ', core)
+        core_sub = milData.core_pred_sub_labels[core]
+        for loc in range(0, core_sub.shape[0]):
+            sub_val = int(core_sub[loc])
+            data_count[sub_val] +=1
+    
+    print("Core Count: ", len(milData.smallROI.cores_list))
+    x_axis = [0, 1, 2, 3]
+    labels = ['healthy', 'high', 'CA', 'low']
+    print(data_count)
+    
+    fig, ax = plt.subplots()
+    
+    ax.bar(x_axis, data_count)
+    ax.set_ylabel('Tissue Locations Count')
+    ax.set_title('Dataset Tissue Distribution')
+    ax.set_xticks(x_axis)
+    ax.set_xticklabels(labels)
+    
+    plt.show()
+    
+    
+        
     
     
     
-   
+    
     
 #single_tissue_select_data_one_feature(feature_num=9)    
-
+plot_class_imbalance_tissue()
 
 #plot_single_distribution()
 #histo_single_feature(feature_num=9)
 #histo_single_tissue(feature_num=208)
-pdf_single_tissue(feature_num=208)
+#pdf_single_tissue(feature_num=208)
 
     
     
