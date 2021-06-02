@@ -73,10 +73,66 @@ class SmallROIViz():
             self.core_specific_positions[core] = core_positions
 
 
+class SimData():
+    
+    def __init__(self, h5_name = 'sim_multiClass.h5'):
+        self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'OriginalData')
+        self.data_path = os.path.join(self.data_folder, h5_name)
+        self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
+        self.tumor_dict = {'Stroma': 0, 'Tumor': 1}
+        
+        f = h5py.File(self.data_path, 'r')
+        keys = list(f.keys())        
+        dset = f['msidata']
+        
+        self.position = dset['position']
+        self.spec = dset['spec']
+        subtissue_labels = dset['subtissue_label']
+        tissue_label = dset['tissue_label']
+        sample = dset['sample']
+        
+        sample_number = np.zeros((sample.shape[0]))
+        for row in range(0, sample.shape[0]):
+            label = sample[row].decode('UTF-8')
+            label = int(label[6:])
+            sample_number[row] = label
+        self.core = sample_number
+        
+        sub_labels = np.zeros((subtissue_labels.shape[0]))
+        for row in range(0, subtissue_labels.shape[0]):
+            label = subtissue_labels[row].decode('UTF-8')
+            sub_labels[row] = self.diagnosis_dict[label]
+        self.subtissue_labels = sub_labels
+        
+        tissue_labels_numbers = np.zeros((tissue_label.shape[0]))
+        for row in range(0, tissue_label.shape[0]):
+            label = tissue_label[row].decode('UTF-8')
+            tissue_labels_numbers[row] = self.diagnosis_dict[label]
+        self.tissue_labels = tissue_labels_numbers
+        
+        positions = np.zeros((self.position.shape[0], 2))
+        for row in range(0, positions.shape[0]):
+            positions[row, 0] = self.position[row][0]
+            positions[row, 1] = self.position[row][1]
+        self.position = positions
+        
+    def split_cores(self):
+        self.cores_list = np.unique(self.core)
+        self.core_specific_positions = {}
+        
+        for core in self.cores_list:            
+            core_positions = np.where(self.core==core)            
+            self.core_specific_positions[core] = core_positions
+    
+
+
 class MIL_Data_Only():
    def  __init__(self, num_classes=4):
-        self.smallROI = SmallROIViz()
+       
+        self.smallROI = SimData()
+        #self.smallROI = SmallROIViz()      # Change here to SmallROIViz()
         self.smallROI.split_cores()
+        self.smallROI.cores_list = [1,2,3,9]    # for sim data
         self.num_classes = num_classes
         #smallROI.cores_list = [7, 10,6, 4,]
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
@@ -143,7 +199,7 @@ class MIL_Data_Only():
         for j, clabel in enumerate(color_bar_labels):
             #cbar.ax.text(.5, (2 * j + 1)/2, clabel, ha='center', va='center')
             cbar.ax.text(7,  (2 * j + 1)/2, clabel, va='center')
-        filename = 'Images/True'+ str(int(core)) + '.png'
+        filename = 'Images/TrueSim'+ str(int(core)) + '.png'
         print(filename)
         
         plt.savefig(filename, pad_inches=0)
@@ -159,5 +215,5 @@ class MIL_Data_Only():
     
 #num_classes = 4
 
-#mil_data = MIL_Data_Only(num_classes=4)
-#mil_data.save_im_all_cores()
+mil_data = MIL_Data_Only(num_classes=4)
+mil_data.save_im_all_cores()

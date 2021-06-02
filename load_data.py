@@ -275,7 +275,7 @@ class H5MSI():
         
 class SmallROI():
     
-    def __init__(self, h5_name = 'smallROI.h5'):
+    def __init__(self, h5_name = 'smallROI.h5', num_classes= 4):
         self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'OriginalData')
         self.data_path = os.path.join(self.data_folder, h5_name)
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
@@ -301,20 +301,28 @@ class SmallROI():
         sub_labels = np.zeros((subtissue_labels.shape[0]))
         for row in range(0, subtissue_labels.shape[0]):
             label = subtissue_labels[row].decode('UTF-8')
+            if num_classes == 2:
+                if label != 'healthy':
+                    label = 'high'
             sub_labels[row] = self.diagnosis_dict[label]
         self.subtissue_labels = sub_labels
         
         tissue_labels_numbers = np.zeros((tissue_label.shape[0]))
         for row in range(0, tissue_label.shape[0]):
             label = tissue_label[row].decode('UTF-8')
+            if num_classes == 2:
+                if label != 'healthy':
+                    label = 'high'
             tissue_labels_numbers[row] = self.diagnosis_dict[label]
         self.tissue_labels = tissue_labels_numbers
+        
         
         positions = np.zeros((self.position.shape[0], 2))
         for row in range(0, positions.shape[0]):
             positions[row, 0] = self.position[row][0]
             positions[row, 1] = self.position[row][1]
         self.position = positions
+        
         
     def split_cores(self):
 
@@ -324,7 +332,8 @@ class SmallROI():
         for core in self.cores_list:            
             core_positions = np.where(self.core==core)            
             self.core_specific_positions[core] = core_positions
-        
+
+            
         
         
 
