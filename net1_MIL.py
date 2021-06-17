@@ -92,14 +92,10 @@ class MSInet1(object):
         conv1 =   tf.nn.relu(conv1d(self.xdev, W_conv1) + b_conv1) 
         pool1 = tf.nn.max_pool(conv1, 2, 2, padding= "VALID")
         
-        batch1 = v1.layers.batch_normalization(pool1, training=self.training)
-
-        conv2 = tf.nn.relu(conv1d(batch1, W_conv2) + b_conv2) 
+        conv2 = tf.nn.relu(conv1d(pool1, W_conv2) + b_conv2) 
         pool2 = tf.nn.max_pool(conv2, 2, 2, padding= "VALID")
-        
-        batch2 = v1.layers.batch_normalization(pool2, training=self.training)
-        
-        conv3 =   tf.nn.relu(conv1d(batch2, W_conv3) + b_conv3) 
+                
+        conv3 =   tf.nn.relu(conv1d(pool2, W_conv3) + b_conv3) 
         pool3 = tf.nn.max_pool(conv3, 2, 2, padding="VALID")
         flat_final_conv = v1.layers.flatten(pool3)
         
@@ -113,8 +109,7 @@ class MSInet1(object):
         #drop_fc1 = tf.nn.dropout(fc1, self.fc_keep_prob, training=self.training)
         drop_fc1 = v1.layers.dropout(fc1, self.fc_keep_prob, training=self.training)
         
-        batch3 = v1.layers.batch_normalization(drop_fc1, training=self.training)
-        fc2 = tf.nn.relu(tf.matmul(batch3, W_fc2) + b_fc2)
+        fc2 = tf.nn.relu(tf.matmul(drop_fc1, W_fc2) + b_fc2)
         self.y_conv = tf.identity(fc2, name='full_op')
         
         

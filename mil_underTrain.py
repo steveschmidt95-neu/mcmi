@@ -1,3 +1,4 @@
+
   
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -37,7 +38,9 @@ def one_hot_probability_to_single_label(labels, num_classes):
 
 class MIL():
     
-    def __init__(self, fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=12, filters_layer2=24, filters_layer3=48, batch_size=4, lr=.001, keep_prob=.8, small_train=True):
+    def __init__(self, fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=12, 
+                 filters_layer2=24, filters_layer3=48, batch_size=4, lr=.001, keep_prob=.8, 
+                 small_train=True, undertrain=True):
         
         self.smallROI = SmallROI(num_classes=num_classes)
         self.smallROI.split_cores()
@@ -59,6 +62,7 @@ class MIL():
         self.lr = lr
         self.keep_prob = keep_prob
         self.num_classes = num_classes
+        self.undertrain=undertrain
         
         print("Cores Included: ", self.smallROI.cores_list)
         
@@ -68,6 +72,13 @@ class MIL():
         self.highest_score = .5
         self.average_score = 0
         self.final_score = 0
+        
+        #For Use in undertraining
+        self.limiting_factor = 0
+        self.positive_predicted = 0
+        self.negative_predicted = 0
+        self.neg_train_limit_hit = 0
+        self.pos_train_limit_hit = 0
     
     # count the number of subtissue labels that will be fed into the training for helathy tissue in fiorst epoch
     def count_healthy_locs_core_only(self):
@@ -111,81 +122,18 @@ class MIL():
             
         self.total_healthy_subtissue = self.count_healthy_locs_core_only()
     
-    def _compute_params_nonhealthy_only_single_core(self, core):
-        tissue_count = {'high': 0, 'CA': 0, 'low': 0, 'healthy': 0}
-        
-        total_cost = 0
-        batch_idx  = 0
-        
-        valid_input_val_locs = np.where(self.core_pred_sub_labels[core]!=self.diagnosis_dict['healthy'])
-        total_input_vals = valid_input_val_locs[0].shape[0]
-        
-        if total_input_vals < self.batch_size:
-            print('Total Onput: ', total_input_vals)
-        
-        spec = self.core_spec[core][valid_input_val_locs]
-        
-        
-        while (batch_idx+self.batch_size < total_input_vals):
-            train_batch = spec[batch_idx:batch_idx+self.batch_size]
-            train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-            
-            train_labels = np.zeros((self.batch_size, 4))
-            train_labels[:, self.core_true_label[core]] = 1
-            
-            tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-            tissue_count['low'] += np.sum(train_labels[:, self.diagnosis_dict['low']])
-            tissue_count['CA'] += np.sum(train_labels[:, self.diagnosis_dict['CA']])
-            tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
-
-
-            cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
-            total_cost+=cost
-            self.core_probability_labels[core][batch_idx:batch_idx+self.batch_size] = preds
-            
-            batch_idx += self.batch_size
-        
-        if batch_idx == total_input_vals:
-            return(total_cost, tissue_count)
-            
-        train_batch = spec[(self.batch_size*-1):, :]
-        train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-        
-        try:
-            assert train_batch.shape[0] == self.batch_size
-        except AssertionError:
-            print('Wrong Shape')
-            print(train_batch.shape)
-            return(total_cost, tissue_count)
-        
-        train_labels = np.zeros((self.batch_size, 4))
-        train_labels[:, self.core_true_label[core]] = 1
-        
-        tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-        tissue_count['low'] += np.sum(train_labels[:, self.diagnosis_dict['low']])
-        tissue_count['CA'] += np.sum(train_labels[:, self.diagnosis_dict['CA']])
-        tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
-        
-        cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
-        self.core_probability_labels[core][(self.batch_size*-1):, :] = preds
-        total_cost+=cost
-        
-        return(total_cost, tissue_count)
     
-    def _compute_params_nonhealthy_only_single_core2class(self, core):
-        tissue_count = {'high': 0, 'healthy': 0}
+    def _compute_params_healthy_only_single_core2class_hetero(self, core):
         
         total_cost = 0
         batch_idx  = 0
+        healthy_computed = 0
         
-        valid_input_val_locs = np.where(self.core_pred_sub_labels[core]!=self.diagnosis_dict['healthy'])
+        valid_input_val_locs = np.where(self.core_pred_sub_labels[core]==self.diagnosis_dict['healthy'])
+        np.random.shuffle(valid_input_val_locs[0])
         total_input_vals = valid_input_val_locs[0].shape[0]
         
-        if total_input_vals < self.batch_size:
-            print('Total Onput: ', total_input_vals)
-        
         spec = self.core_spec[core][valid_input_val_locs]
-        
         
         while (batch_idx+self.batch_size < total_input_vals):
             train_batch = spec[batch_idx:batch_idx+self.batch_size]
@@ -193,19 +141,20 @@ class MIL():
             
             train_labels = np.zeros((self.batch_size, self.num_classes))
             train_labels[:, self.core_true_label[core]] = 1
-            
-            tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-            tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
-
 
             cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
             total_cost+=cost
             self.core_probability_labels[core][batch_idx:batch_idx+self.batch_size] = preds
             
+            # Hit the limit on training healthy subtissues
+            healthy_computed += batch_size
+            if(self.limiting_factor==1 and (healthy_computed > self.positive_predicted)):
+                return(total_cost)
+            
             batch_idx += self.batch_size
         
         if batch_idx == total_input_vals:
-            return(total_cost, tissue_count)
+            return(total_cost)
             
         train_batch = spec[(self.batch_size*-1):, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
@@ -215,50 +164,51 @@ class MIL():
         except AssertionError:
             print('Wrong Shape')
             print(train_batch.shape)
-            return(total_cost, tissue_count)
+            return(total_cost)
         
         train_labels = np.zeros((self.batch_size, self.num_classes))
         train_labels[:, self.core_true_label[core]] = 1
         
-        tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-        tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
-        
         cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
         self.core_probability_labels[core][(self.batch_size*-1):, :] = preds
         total_cost+=cost
         
-        return(total_cost, tissue_count)
-        
+        return(total_cost)
     
-    def _compute_params_single_core(self, core):
-        
-        tissue_count = {'high': 0, 'CA': 0, 'low': 0, 'healthy': 0}
+    def _compute_params_nonhealthy_only_single_core2class_hetero(self, core):
         
         total_cost = 0
         batch_idx  = 0
-        total_input_vals = self.core_probability_labels[core].shape[0]
+        non_healthy_computed = 0
+        
+        valid_input_val_locs = np.where(self.core_pred_sub_labels[core]!=self.diagnosis_dict['healthy'])
+        np.random.shuffle(valid_input_val_locs[0])
+        total_input_vals = valid_input_val_locs[0].shape[0]
+        
+        spec = self.core_spec[core][valid_input_val_locs]
+        
         while (batch_idx+self.batch_size < total_input_vals):
-            
-            train_batch = self.core_spec[core][batch_idx:batch_idx+self.batch_size]
+            train_batch = spec[batch_idx:batch_idx+self.batch_size]
             train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
             
-            train_labels = self.core_pred_sub_labels[core][batch_idx:batch_idx+self.batch_size]
-            train_labels = single_to_one_hot(train_labels, self.num_classes)
-            
-            tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-            tissue_count['low'] += np.sum(train_labels[:, self.diagnosis_dict['low']])
-            tissue_count['CA'] += np.sum(train_labels[:, self.diagnosis_dict['CA']])
-            tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
+            train_labels = np.zeros((self.batch_size, self.num_classes))
+            train_labels[:, self.core_true_label[core]] = 0
 
             cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
             total_cost+=cost
             self.core_probability_labels[core][batch_idx:batch_idx+self.batch_size] = preds
+            
+            # Hit the limit on training non-healthy subtissues
+            non_healthy_computed += batch_size
+            if(self.limiting_factor==0 and (non_healthy_computed > self.negative_predicted)):
+                return(total_cost)
+            
             batch_idx += self.batch_size
         
         if batch_idx == total_input_vals:
-            return(total_cost, tissue_count)
-        
-        train_batch = self.core_spec[core][(self.batch_size*-1):, :]
+            return(total_cost)
+            
+        train_batch = spec[(self.batch_size*-1):, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
         
         try:
@@ -266,25 +216,21 @@ class MIL():
         except AssertionError:
             print('Wrong Shape')
             print(train_batch.shape)
-            return(total_cost, tissue_count)
+            return(total_cost)
         
-        train_labels = self.core_pred_sub_labels[core][(self.batch_size*-1):]
-        train_labels = single_to_one_hot(train_labels, self.num_classes)
-        
-        tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-        tissue_count['low'] += np.sum(train_labels[:, self.diagnosis_dict['low']])
-        tissue_count['CA'] += np.sum(train_labels[:, self.diagnosis_dict['CA']])
-        tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
+        train_labels = np.zeros((self.batch_size, self.num_classes))
+        train_labels[:, self.core_true_label[core]] = 1
         
         cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
         self.core_probability_labels[core][(self.batch_size*-1):, :] = preds
         total_cost+=cost
         
-        return(total_cost, tissue_count)
+        return(total_cost)
     
+    # For homogenoys tissues
     def _compute_params_single_core_2class(self, core):
-        
-        tissue_count = {'high': 0, 'healthy': 0}
+        cost = 0
+        healthy_computed = 0
         
         total_cost = 0
         batch_idx  = 0
@@ -296,17 +242,18 @@ class MIL():
             
             train_labels = self.core_pred_sub_labels[core][batch_idx:batch_idx+self.batch_size]
             train_labels = single_to_one_hot(train_labels, self.num_classes)
-            
-            tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-            tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
 
             cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
             total_cost+=cost
             self.core_probability_labels[core][batch_idx:batch_idx+self.batch_size] = preds
             batch_idx += self.batch_size
+            
+            healthy_computed += batch_size
+            if(self.limiting_factor==1 and (healthy_computed > self.positive_predicted)):
+                return(total_cost)
         
         if batch_idx == total_input_vals:
-            return(total_cost, tissue_count)
+            return(total_cost)
         
         train_batch = self.core_spec[core][(self.batch_size*-1):, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
@@ -316,264 +263,33 @@ class MIL():
         except AssertionError:
             print('Wrong Shape')
             print(train_batch.shape)
-            return(total_cost, tissue_count)
+            return(total_cost)
         
         train_labels = self.core_pred_sub_labels[core][(self.batch_size*-1):]
         train_labels = single_to_one_hot(train_labels, self.num_classes)
-        
-        tissue_count['high'] += np.sum(train_labels[:, self.diagnosis_dict['high']])
-        tissue_count['healthy'] += np.sum(train_labels[:, self.diagnosis_dict['healthy']])
         
         cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
         self.core_probability_labels[core][(self.batch_size*-1):, :] = preds
         total_cost+=cost
         
-        return(total_cost, tissue_count)
-    
-    
-    # Makes sure you are training on the same number of inputs per class in each epoch
-    def balance_training(self, total_tissue_count):
-        balance_classes = {'low': 0, 'high': 0, 'CA': 0}
-        total_cost = 0
-        cost = 0
-        
-        for balance_class in balance_classes.keys():
-            k= int(self.total_healthy_subtissue - total_tissue_count[balance_class])
-            
-            # no need to balance classes with enough labels
-            if k <= 0:
-                print('No need to balance ', balance_class)
-                continue
-            
-            k_highest = self.choose_k_highest_probs_from_class(k, balance_class)
-            if k_highest == -1:
-                return(cost)
-            k_count = k_highest.shape[0]
-                
-            # make sure you have enough labels to fit into batch
-            # Double array repeatdly until its large enough
-        
-            # make sure you have enough from the request
-            while (k >= k_count):
-                if k_count == 1:
-                    doubled_array = np.zeros((k_count+1, k_highest.shape[1]))
-                    doubled_array[0, :] = k_highest
-                    doubled_array[1, :] = k_highest
-                else:
-                    doubled_array = np.zeros((k_count*2, k_highest.shape[1]))
-                    doubled_array[0:k_highest.shape[0]] = k_highest
-                    doubled_array[k_highest.shape[0]:] = k_highest
-                
-                k_count = doubled_array.shape[0]
-                k_highest = doubled_array
-            
-            # make sure you have enough to fit the batch size
-            while (self.batch_size >= k_count):
-                if k_count == 1:
-                    doubled_array = np.zeros((k_count+1, k_highest.shape[1]))
-                    doubled_array[0, :] = k_highest
-                    doubled_array[1, :] = k_highest
-                else:
-                    doubled_array = np.zeros((k_count*2, k_highest.shape[1]))
-                    doubled_array[0:k_highest.shape[0]] = k_highest
-                    doubled_array[k_highest.shape[0]:] = k_highest
-                
-                k_count = doubled_array.shape[0]
-                k_highest = doubled_array
-                
-            k_highest = k_highest[0:k, :]
-            k_count = k_highest.shape[0]
-            
-            print('Balancing ', balance_class, ' By ', k_count, ' Inputs')
-            batch_idx = 0
-            while (batch_idx+self.batch_size < k_count):
-                train_batch = k_highest[batch_idx:batch_idx+self.batch_size, :]
-                train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-
-                train_labels = np.zeros((self.batch_size, self.num_classes))
-                train_labels[:, self.diagnosis_dict[balance_class]] = 1
-                
-                cost, _ = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
-                total_cost+=cost
-                batch_idx+= self.batch_size
-            
-            train_batch = k_highest[k_count-self.batch_size:, :]
-            train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-            
-            train_labels = np.zeros((self.batch_size, self.num_classes))
-            train_labels[:, self.diagnosis_dict[balance_class]] = 1
-
-        return(cost)
-    
-    # Makes sure you are training on the same number of inputs per class in each epoch
-    def balance_training2class(self, total_tissue_count):
-        balance_classes = {'high': 0}
-        total_cost = 0
-        cost = 0
-        
-        for balance_class in balance_classes.keys():
-            k= int(self.total_healthy_subtissue - total_tissue_count[balance_class])
-            
-            # no need to balance classes with enough labels
-            if k <= 0:
-                print('No need to balance ', balance_class)
-                continue
-            
-            k_highest = self.choose_k_highest_probs_from_class(k, balance_class)
-            k_count = k_highest.shape[0]
-                
-            # make sure you have enough labels to fit into batch
-            # Double array repeatdly until its large enough
-        
-            # make sure you have enough from the request
-            while (k >= k_count):
-                if k_count == 1:
-                    doubled_array = np.zeros((k_count+1, k_highest.shape[1]))
-                    doubled_array[0, :] = k_highest
-                    doubled_array[1, :] = k_highest
-                else:
-                    doubled_array = np.zeros((k_count*2, k_highest.shape[1]))
-                    doubled_array[0:k_highest.shape[0]] = k_highest
-                    doubled_array[k_highest.shape[0]:] = k_highest
-                
-                k_count = doubled_array.shape[0]
-                k_highest = doubled_array
-            
-            # make sure you have enough to fit the batch size
-            while (self.batch_size >= k_count):
-                if k_count == 1:
-                    doubled_array = np.zeros((k_count+1, k_highest.shape[1]))
-                    doubled_array[0, :] = k_highest
-                    doubled_array[1, :] = k_highest
-                else:
-                    doubled_array = np.zeros((k_count*2, k_highest.shape[1]))
-                    doubled_array[0:k_highest.shape[0]] = k_highest
-                    doubled_array[k_highest.shape[0]:] = k_highest
-                
-                k_count = doubled_array.shape[0]
-                k_highest = doubled_array
-                
-            k_highest = k_highest[0:k, :]
-            k_count = k_highest.shape[0]
-            
-            print('Balancing ', balance_class, ' By ', k_count, ' Inputs')
-            batch_idx = 0
-            while (batch_idx+self.batch_size < k_count):
-                train_batch = k_highest[batch_idx:batch_idx+self.batch_size, :]
-                train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-
-                train_labels = np.zeros((self.batch_size, self.num_classes))
-                train_labels[:, self.diagnosis_dict[balance_class]] = 1
-                
-                cost, _ = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
-                total_cost+=cost
-                batch_idx+= self.batch_size
-            
-            train_batch = k_highest[k_count-self.batch_size:, :]
-            train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-            
-            train_labels = np.zeros((self.batch_size, self.num_classes))
-            train_labels[:, self.diagnosis_dict[balance_class]] = 1
-
-        return(cost)
-    
-    # Gets the k most likely tissues for a specific class from the subtissue labels that were predicted to be that class
-    def choose_k_highest_probs_from_class(self, k, class_needed):
-        total_class_specific_predicted_count = 0
-        
-        # get total number of values predicted to be this class
-        for core in self.smallROI.cores_list:
-            class_pred_locations = np.where(self.core_pred_sub_labels[core] == self.diagnosis_dict[class_needed])                
-            total_class_specific_predicted_count += class_pred_locations[0].shape[0]
-            
-            # If there are none to be predicted in this cores for a certain class and its core label is the class,
-            # choose the highest values from each core with that label
-            if self.core_true_label[core] == class_needed and class_pred_locations[0].shape[0] == 0:
-                total_class_specific_predicted_count+=1
-        
-        k_highest_values = np.zeros((k, self.sample_shape))
-        all_predicted_probability_values = np.zeros((total_class_specific_predicted_count))
-        all_pred_mspec_vals = np.zeros((total_class_specific_predicted_count, self.sample_shape))
-        
-        loc = 0
-        for core in self.smallROI.cores_list:
-            try:
-                class_pred_locations = np.where(self.core_pred_sub_labels[core] == self.diagnosis_dict[class_needed])
-                chosen_amount_count = class_pred_locations[0].shape[0]
-                
-                # Same case as before, none predicated and core label is that core
-                if self.core_true_label[core] == self.diagnosis_dict[class_needed] and chosen_amount_count == 0:
-                    highest_val_loc = np.argmax(self.core_probability_labels[core][:, self.diagnosis_dict[class_needed]])
-                    
-                    all_pred_mspec_vals[loc:loc+1] = self.core_spec[core][highest_val_loc]
-                    all_predicted_probability_values[loc:loc+1] = self.core_probability_labels[core][highest_val_loc][self.diagnosis_dict[class_needed]]
-                    loc+=1
-                else:
-                    all_pred_mspec_vals[loc:loc+chosen_amount_count] = self.core_spec[core][class_pred_locations]
-                    all_predicted_probability_values[loc:loc+chosen_amount_count] = self.core_probability_labels[core][class_pred_locations, self.diagnosis_dict[class_needed]]
-                    
-                    loc += chosen_amount_count
-            except ValueError:
-                print("Exception Occured During Balancing")
-                return(-1)
-                
-           
-        # Not enough needed
-        if k >= all_predicted_probability_values.shape[0]:
-            return (all_pred_mspec_vals)
-        else:
-            k_highest_val_locs =  np.argpartition(all_predicted_probability_values, -k)[-k:]
-            k_highest_values = all_pred_mspec_vals[k_highest_val_locs]
-            return(k_highest_values)
-    
-    def compute_params_all_cores(self, epoch, balance_training=False, balance_every_x = 5, train_non_healthy_only=True):
-        
-        total_tissue_count = {'high': 0, 'CA': 0, 'low': 0, 'healthy': 0} 
-        epoch_cost = 0
-        for core in self.smallROI.cores_list:
-            
-            if train_non_healthy_only:
-                if self.core_true_label[core] == self.diagnosis_dict['healthy']:
-                    core_cost, tissue_count = self._compute_params_single_core(core)
-                else:
-                    core_cost, tissue_count = self._compute_params_nonhealthy_only_single_core(core)
-            else:
-                core_cost, tissue_count = self._compute_params_single_core(core)
-            
-            total_tissue_count['high'] += tissue_count['high']
-            total_tissue_count['CA'] += tissue_count['CA']
-            total_tissue_count['low'] += tissue_count['low']
-            total_tissue_count['healthy'] += tissue_count['healthy']
-            epoch_cost+=core_cost
-         
-        print('Initial Pass Tissue Count: ', total_tissue_count)
-        if balance_training and (epoch % balance_every_x == 0):
-            additional_cost = self.balance_training(total_tissue_count)
-            epoch_cost+=additional_cost
-        return(epoch_cost)
+        return(total_cost)
     
     def compute_params_all_cores2class(self, epoch, balance_training=False, balance_every_x = 5, train_non_healthy_only=True):
         
-        total_tissue_count = {'high': 0, 'healthy': 0} 
         epoch_cost = 0
         for core in self.smallROI.cores_list:
             
-            if train_non_healthy_only:
+            if self.undertrain:
                 if self.core_true_label[core] == self.diagnosis_dict['healthy']:
-                    core_cost, tissue_count = self._compute_params_single_core2class(core)
+                    core_cost = self._compute_params_single_core_2class(core)
                 else:
-                    core_cost, tissue_count = self._compute_params_nonhealthy_only_single_core2class(core)
+                    non_healthy_cost = self._compute_params_nonhealthy_only_single_core2class_hetero(core)
+                    healthy_cost = self._compute_params_healthy_only_single_core2class_hetero(core)
+                    core_cost = non_healthy_cost + healthy_cost
             else:
-                core_cost, tissue_count = self._compute_params_single_core_2class(core)
-            
-            total_tissue_count['high'] += tissue_count['high']
-            total_tissue_count['healthy'] += tissue_count['healthy']
+                core_cost = self._compute_params_single_core_2class(core)
             epoch_cost+=core_cost
          
-        print('Initial Pass Tissue Count: ', total_tissue_count)
-        if balance_training and (epoch % balance_every_x == 0):
-            additional_cost = self.balance_training2class(total_tissue_count)
-            epoch_cost+=additional_cost
         return(epoch_cost)
             
     def _update_predicted_labels_single_core(self, core, two_class_per_core = True,balance_every_x=5):
@@ -630,17 +346,70 @@ class MIL():
             labels_changed+=core_labels_changed
         return(labels_changed)
     
+    def count_predicted_labels2class(self):
+        limiting_factor = 0
+        positive_predicted_total = 0
+        healthy_predicted_total = 0
+        total_count = 0
+        
+        for core in self.smallROI.cores_list:
+            
+            total_subtissues = self.core_pred_sub_labels[core].shape[0]
+            total_count += total_subtissues
+
+            positive_predicted = (len(np.where(self.core_pred_sub_labels[core] == 1)[0]))
+            healthy_predicted = int(total_subtissues - positive_predicted)
+            
+            positive_predicted_total+=positive_predicted
+            healthy_predicted_total+=healthy_predicted
+            
+        if positive_predicted > healthy_predicted:
+            limiting_factor= 1
+        
+        print("Limiting Factor: ", limiting_factor)
+        assert (healthy_predicted_total + positive_predicted_total) == total_count
+        self.healthy_predicted = healthy_predicted_total
+        self.positive_predicted = positive_predicted_total
+        self.limiting_factor = limiting_factor
+        
+    def count_predicted_labels2class_print(self):
+        limiting_factor = 0
+        positive_predicted_total = 0
+        healthy_predicted_total = 0
+        total_count = 0
+        
+        for core in self.smallROI.cores_list:
+            total_subtissues = self.core_pred_sub_labels[core].shape[0]
+            total_count += total_subtissues
+
+            positive_predicted = (len(np.where(self.core_pred_sub_labels[core] == 1)[0]))
+            healthy_predicted = int(total_subtissues - positive_predicted)            
+            
+            positive_predicted_total+=positive_predicted
+            healthy_predicted_total+=healthy_predicted
+            
+        
+        print('Param Computing Tissue Count --')
+        print("Total Subtissues: ", total_count)
+        print("Healthy Count: ", healthy_predicted_total)
+        print("High Count: ", positive_predicted_total)
+        
+    
+    
     def cnn_X_epoch(self, x, balance_classes=False, reset_healthy_count=False,balance_every_x=5,test_every_x=5, two_class_per_core=False, train_non_healthy_only=False, enforce_healthy_constraint=False, shuffle_core_list=True):
         for epoch in range(1, x):
             print("Epoch ", epoch)
             if shuffle_core_list:
                 print("Shuffling Cores List")
-                random.shuffle(self.smallROI.cores_list)    
+                random.shuffle(self.smallROI.cores_list)   
+            if self.undertrain:
+                self.count_predicted_labels2class()
             if self.num_classes == 2:
                 cost = self.compute_params_all_cores2class(epoch, balance_training=balance_classes, balance_every_x=balance_every_x,train_non_healthy_only=train_non_healthy_only)
             else:
                 cost = self.compute_params_all_cores(epoch, balance_training=balance_classes, balance_every_x=balance_every_x,train_non_healthy_only=train_non_healthy_only)
             
+            #self.count_predicted_labels2class_print()
             print('    Cost: ', cost)            
             labels_changed = self.impute_labels_all_cores(two_class_per_core=two_class_per_core)
             print("    Labels Changed: ", labels_changed)
@@ -882,22 +651,23 @@ class MIL():
             self.viz_single_core_pred(core)
     
 batch_size = 8
-balance_classes=True # train on same amount of each class per epoch
+balance_classes=False # train on same amount of each class per epoch
 balance_every_x = 1
-two_class_per_core=True # make labels in each core only be healthy or the core label
+two_class_per_core=False # make labels in each core only be healthy or the core label
 reset_healthy_count = False # include healthy subtissue in non-healthy cores to count used for balancing classes
 train_non_healthy_only = False # train on only the non-healthy assigned locations in non-healthy tissues
-enforce_healthy_constraint = True # Enforce the same constraint for healthy tissus on non-healthy cores
-small_train = False
+enforce_healthy_constraint = False # Enforce the same constraint for healthy tissus on non-healthy cores
+small_train = True
 shuffle_core_list = True
+undertrain=True
 
 test_every_x = 1
-num_epochs=150  
-lr=.001
+num_epochs=150
+lr=.0001
 
-MIL = MIL(fc_units = 100, num_classes=2, width1=38,  width2=18, width3=16, filters_layer1=20, 
-    filters_layer2=40, filters_layer3=80, batch_size=batch_size, lr=lr, keep_prob=.99,
-    small_train=small_train)
+MIL = MIL(fc_units = 100, num_classes=2, width1=38,  width2=18, width3=16, filters_layer1=40, 
+    filters_layer2=60, filters_layer3=100, batch_size=batch_size, lr=lr, keep_prob=.99,
+    small_train=small_train,undertrain=undertrain)
 MIL.init_MSI()
 MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, 
                 balance_every_x=balance_every_x, test_every_x=test_every_x,
