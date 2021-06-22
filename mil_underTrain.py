@@ -21,7 +21,6 @@ import matplotlib
 import random
 
 
-
 def single_to_one_hot(labels, num_classes):
         #diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
         # shifted to {'high': 0, 'CA': 1, 'low': 2, 'healthy': 3}
@@ -31,8 +30,13 @@ def single_to_one_hot(labels, num_classes):
         one_hot_labels[class_locations, hot_class] = 1
     return(one_hot_labels)
 
-def one_hot_probability_to_single_label(labels, num_classes):
-    argmax_labels = np.argmax(labels, axis=1)
+def one_hot_probability_to_single_label(pred_labels, prev_labels, num_classes):
+  
+    uncertain_pred_locations = np.where(pred_labels[:, 0]==.5)
+    
+    argmax_labels = np.argmax(pred_labels, axis=1)
+    # Dont update lcoations where prediction output was .5
+    argmax_labels[uncertain_pred_locations] = prev_labels[uncertain_pred_locations]
     return(argmax_labels)
 
 
@@ -156,15 +160,8 @@ class MIL():
         if batch_idx == total_input_vals:
             return(total_cost)
             
-        train_batch = spec[(self.batch_size*-1):, :]
+        train_batch = spec[((self.batch_size*-1)):, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-        
-        try:
-            assert train_batch.shape[0] == self.batch_size
-        except AssertionError:
-            print('Wrong Shape')
-            print(train_batch.shape)
-            return(total_cost)
         
         train_labels = np.zeros((self.batch_size, self.num_classes))
         train_labels[:, self.core_true_label[core]] = 1
@@ -208,15 +205,8 @@ class MIL():
         if batch_idx == total_input_vals:
             return(total_cost)
             
-        train_batch = spec[(self.batch_size*-1):, :]
+        train_batch = spec[((self.batch_size*-1)):, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-        
-        try:
-            assert train_batch.shape[0] == self.batch_size
-        except AssertionError:
-            print('Wrong Shape')
-            print(train_batch.shape)
-            return(total_cost)
         
         train_labels = np.zeros((self.batch_size, self.num_classes))
         train_labels[:, self.core_true_label[core]] = 1
@@ -255,15 +245,8 @@ class MIL():
         if batch_idx == total_input_vals:
             return(total_cost)
         
-        train_batch = self.core_spec[core][(self.batch_size*-1):, :]
+        train_batch = self.core_spec[core][((self.batch_size)*-1):, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
-        
-        try:
-            assert train_batch.shape[0] == self.batch_size
-        except AssertionError:
-            print('Wrong Shape')
-            print(train_batch.shape)
-            return(total_cost)
         
         train_labels = self.core_pred_sub_labels[core][(self.batch_size*-1):]
         train_labels = single_to_one_hot(train_labels, self.num_classes)
@@ -302,29 +285,33 @@ class MIL():
             train_batch = self.core_spec[core][batch_idx:batch_idx+self.batch_size]
             train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
             
-            previous_labels = self.core_pred_sub_labels[core][total_input_vals-self.batch_size:]
+            previous_labels = self.core_pred_sub_labels[core][batch_idx:batch_idx+self.batch_size]
 
             preds = self.net1.single_core_predict_labels(train_batch, keep_prob=self.keep_prob)
-            new_imputed_labels = one_hot_probability_to_single_label(preds, self.num_classes)
+            new_imputed_labels = one_hot_probability_to_single_label(preds, previous_labels, self.num_classes)
             
             if two_class_per_core:
                 new_imputed_labels[np.where(new_imputed_labels!=self.diagnosis_dict['healthy'])] = self.core_true_label[core]
             self.core_probability_labels[core][total_input_vals-self.batch_size:] = preds
             
             diffs = len(np.where(previous_labels!=new_imputed_labels)[0])
+            
             self.core_pred_sub_labels[core][batch_idx:batch_idx+self.batch_size] = new_imputed_labels
             labels_changed+=diffs
             
             batch_idx += self.batch_size
-        
+
         train_batch = self.core_spec[core][total_input_vals-self.batch_size:, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
         
         train_labels = self.core_pred_sub_labels[core][total_input_vals-self.batch_size:]
         train_labels = single_to_one_hot(train_labels, self.num_classes)
         
+        previous_labels = self.core_pred_sub_labels[core][total_input_vals-self.batch_size:]
+
+    
         preds = self.net1.single_core_predict_labels(train_batch, keep_prob=self.keep_prob)
-        new_imputed_labels = one_hot_probability_to_single_label(preds, self.num_classes)
+        new_imputed_labels = one_hot_probability_to_single_label(preds, previous_labels, self.num_classes)
         if two_class_per_core:
             new_imputed_labels[np.where(new_imputed_labels!=self.diagnosis_dict['healthy'])] = self.core_true_label[core]
         self.core_probability_labels[core][total_input_vals-self.batch_size:] = preds
@@ -659,11 +646,11 @@ train_non_healthy_only = False # train on only the non-healthy assigned location
 enforce_healthy_constraint = False # Enforce the same constraint for healthy tissus on non-healthy cores
 small_train = True
 shuffle_core_list = True
-undertrain=True
+undertrain=False
 
 test_every_x = 1
 num_epochs=150
-lr=.0001
+lr=.001
 
 MIL = MIL(fc_units = 100, num_classes=2, width1=38,  width2=18, width3=16, filters_layer1=40, 
     filters_layer2=60, filters_layer3=100, batch_size=batch_size, lr=lr, keep_prob=.99,
