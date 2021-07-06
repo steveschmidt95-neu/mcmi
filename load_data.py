@@ -87,6 +87,8 @@ class MSIData():
         self.msispec = dset['msispec']
         self.position = dset['position']
         
+                
+        
         # put all entries into a matrix
         line_count = 0
         for line in open(self.sub_tab_path):
