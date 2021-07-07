@@ -301,6 +301,7 @@ class MIL():
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
         
         train_labels = np.zeros((self.batch_size, self.num_classes))
+        train_labels[:, self.core_true_label[core]] = 1
         
         cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
         self.core_probability_labels[core][(self.batch_size*-1):, :] = preds
