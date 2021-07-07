@@ -35,14 +35,16 @@ def single_to_one_hot(labels, num_classes):
         one_hot_labels[class_locations, hot_class] = 1
     return(one_hot_labels)
 
-def one_hot_probability_to_single_label(pred_labels, prev_labels, num_classes):
-    
+def one_hot_probability_to_single_label(pred_labels, prev_labels, num_classes):    
     uncertain_pred_locations = np.where(pred_labels[:, 0]==.5)
     
     argmax_labels = np.argmax(pred_labels, axis=1)
     # Dont update lcoations where prediction output was .5
-    argmax_labels[uncertain_pred_locations] = prev_labels[uncertain_pred_locations]
+    if (uncertain_pred_locations[0].shape[0]>0):
+        argmax_labels[uncertain_pred_locations[0]] = np.argmax(prev_labels[uncertain_pred_locations])
     return(argmax_labels)
+    
+    
 
 
 class MIL():
@@ -58,11 +60,9 @@ class MIL():
         
         # Use this for a smaller training set
         if small_train:
-            self.smallROI.cores_list = [4, 10, 6, 7]   # One of each 3 non-healthy, one healthy
-            #self.smallROI.cores_list = [10, 6, 7,  4,13, 18, 33, 38, 39, 43]  # 1 of each of the 3 non-healthy labels, and all the healthy cores
-            #self.smallROI.cores_list = [7, 10,6, 4, 9, 11,33, 34]
-            
-        
+            #self.train_data_total.cores_list = ['ROI8TMA2train', 'ROI10TMA1train']
+            self.train_data_total.cores_list = ['ROI8TMA2train', 'ROI10TMA1train', 'ROI9TMA1train', 'ROI24TMA1train']
+
         self.diagnosis_dict =         {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.diagnosis_dict_reverse = {1: 'high', 2: 'CA', 3: 'low', 0:'healthy'}
         
@@ -78,7 +78,7 @@ class MIL():
         
         print("Cores Included: ", self.smallROI.cores_list)
         
-        self.sample_shape = int(self.smallROI.spec[0].shape[0] -2)
+        self.sample_shape = int(self.smallROI.spec[0].shape[0])
         self.net1 = MSInet1(data_shape = self.sample_shape, fc_units=fc_units, num_classes=num_classes, width1=width1, width2=width2, width3=width3, filters_layer1=filters_layer1, filters_layer2=filters_layer2, filters_layer3=filters_layer3, batch_size=batch_size,lr=lr)
         self.net1.build_graph()
         self.highest_score = .5
@@ -236,11 +236,11 @@ class MIL():
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
         
         train_labels = np.zeros((self.batch_size, self.num_classes))
-        train_labels[:, self.core_true_label[core]] = 1
+        train_labels[:, 1] = 1
         
         try:
             cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
-            self.core_probability_labels[core][(self.batch_size*-1):, :] = preds
+            self.train_core_probability_labels[core][(self.batch_size*-1):, :] = preds
             total_cost+=cost
         except ValueError:
             print("Wring Shape: ", train_batch.shape)
@@ -262,7 +262,6 @@ class MIL():
             train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
             
             train_labels = self.train_core_pred_sub_labels[core][batch_idx:batch_idx+self.batch_size]
-            train_labels = single_to_one_hot(train_labels, self.num_classes)
 
             cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
             total_cost+=cost
@@ -364,9 +363,7 @@ class MIL():
 
             preds = self.net1.single_core_predict_labels(train_batch, keep_prob=self.keep_prob)
             new_imputed_labels = one_hot_probability_to_single_label(preds, previous_labels, self.num_classes)
-            
-            if two_class_per_core:
-                new_imputed_labels[np.where(new_imputed_labels!=self.diagnosis_dict['healthy'])] = self.core_true_label[core]
+            new_imputed_labels = single_to_one_hot(new_imputed_labels, 2)
             self.train_core_probability_labels[core][total_input_vals-self.batch_size:] = preds
             
             diffs = len(np.where(previous_labels!=new_imputed_labels)[0])
@@ -379,9 +376,6 @@ class MIL():
         train_batch = self.train_core_spec[core][total_input_vals-self.batch_size:, :]
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
         
-        train_labels = self.train_core_pred_sub_labels[core][total_input_vals-self.batch_size:]
-        train_labels = single_to_one_hot(train_labels, self.num_classes)
-        
         previous_labels = self.train_core_pred_sub_labels[core][total_input_vals-self.batch_size:]
     
         preds = self.net1.single_core_predict_labels(train_batch, keep_prob=self.keep_prob)
@@ -390,6 +384,7 @@ class MIL():
             new_imputed_labels[np.where(new_imputed_labels!=self.diagnosis_dict['healthy'])] = self.core_true_label[core]
         self.train_core_probability_labels[core][total_input_vals-self.batch_size:] = preds
         
+        new_imputed_labels = single_to_one_hot(new_imputed_labels, 2)
         diffs = len(np.where(previous_labels!=new_imputed_labels)[0])
         self.train_core_pred_sub_labels[core][total_input_vals-self.batch_size:] = new_imputed_labels
         labels_changed+=diffs
@@ -439,8 +434,6 @@ class MIL():
         diffs = len(np.where(previous_labels!=new_imputed_labels)[0])
         self.test_core_pred_sub_labels[core][total_input_vals-self.batch_size:] = new_imputed_labels
         labels_changed+=diffs
-        
-        
         
     
     def impute_labels_all_cores(self,two_class_per_core=False):
@@ -496,7 +489,6 @@ class MIL():
             positive_predicted_total+=positive_predicted
             healthy_predicted_total+=healthy_predicted
             
-        
         print('Param Computing Tissue Count --')
         print("Total Subtissues: ", total_count)
         print("Healthy Count: ", healthy_predicted_total)
@@ -538,8 +530,10 @@ class MIL():
     # Impute the new labels and enforce label constraints
     def enforce_label_constraints(self, enforce_healthy_constraint=False):
         k_large_elements = self.batch_size
-        for core in self.train_data_total.cores:
+        for core in self.train_data_total.cores_list:
             core_label = self.train_core_true_label[core]
+            if core_label !=0:
+                core_label = 1
             
             # Set all labels to healthy if core is labeled healthy
             if core_label == self.diagnosis_dict['healthy']:
@@ -550,7 +544,7 @@ class MIL():
                 # All labels are healthy
                 if np.sum(self.train_core_pred_sub_labels[core]) <= k_large_elements or np.where(self.train_core_pred_sub_labels[core] == core_label)[0].shape[0] == 0:
                     #Pick the max values specific to the core class
-                    k_max_element_lcoations = np.argpartition(self.core_probability_labels[core][:, core_label], -k_large_elements)[-k_large_elements:]
+                    k_max_element_lcoations = np.argpartition(self.train_core_probability_labels[core][:, core_label], -k_large_elements)[-k_large_elements:]
                     self.train_core_pred_sub_labels[core][k_max_element_lcoations] = core_label
                     
                 # apply the same rule to healthy tissue, not leaving a tissue with comptely unhealthy labels
@@ -567,6 +561,9 @@ class MIL():
         true_labels = self.test_core_true_sub_labels[core]
         pred_labels = self.test_core_pred_sub_labels[core]
         core_label = self.test_core_true_label[core]
+        if core_label !=0:
+            core_label = 1
+        
         
         # Case for healthy tissues
         if(core_label == self.diagnosis_dict['healthy']):
@@ -593,6 +590,7 @@ class MIL():
     def eval_all_cores2class(self):
         # THis is after enforcing constraints
         #self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
+        print('  - Evaluating All Cores - ')
         tp_high = 0
         tn_all_cores = 0
         total_high = 0
@@ -603,7 +601,7 @@ class MIL():
                 continue
             
             else:
-                self.get_test_labels(core)
+                self.get_test_labels_single_core(core)
             
             tp, tn, total_pos, total_neg, core_label = self.eval_single_core_direct_labels(core)
             
@@ -617,7 +615,7 @@ class MIL():
                 tn_all_cores += tn
                 total_neg_all_cores += total_neg
                 
-        print('  - Evaluating All Cores - ')
+        
         accuracy = (tp_high + tn_all_cores) / (total_high + total_neg_all_cores)
         print('Accuracy: ', accuracy)
         
@@ -692,8 +690,8 @@ balance_every_x = 1
 two_class_per_core=False # make labels in each core only be healthy or the core label
 reset_healthy_count = False # include healthy subtissue in non-healthy cores to count used for balancing classes
 train_non_healthy_only = False # train on only the non-healthy assigned locations in non-healthy tissues
-enforce_healthy_constraint = True # Enforce the same constraint for healthy tissus on non-healthy cores
-small_train = False
+enforce_healthy_constraint = False # Enforce the same constraint for healthy tissus on non-healthy cores
+small_train = True
 shuffle_core_list = True
 undertrain=True
 

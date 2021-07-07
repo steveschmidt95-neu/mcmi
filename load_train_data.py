@@ -174,7 +174,11 @@ class H5MSI_Train():
         for key in self.data_files.keys():
             if not ('Labels' in key):
                 self.cores_list.append(key)
-                self.train_data[key] = self.data_files[key]
+                
+                data = self.data_files[key]
+                resized_data = np.zeros((data.shape[0], data.shape[1]+2))
+                resized_data[:, 0:(data.shape[1])] = data 
+                self.train_data[key] = resized_data
                 self.train_data[key + '_Labels'] = self.data_files[key + '_Labels']
  
         
@@ -212,4 +216,4 @@ class H5MSI_Train():
 #orig = MSITrainData()
 
 #h5 = H5MSI_Train()            
-#h5.one_hot_labels()
+#5.one_hot_labels()
