@@ -150,10 +150,11 @@ class H5MSI_Train():
         h5_files = [elem for elem in h5_files if 'train' in elem]
         self.num_rois = len(h5_files)/2
         self.data_files = {}
-        self.train_files = {}
+        self.train_data = {}
         self.num_classes = 4
         self.data_is_flat = False
         self.flat_labels = {}
+        self.cores_list = []
         
         # Read in all the h5 files
         for h5_file in h5_files:
@@ -172,45 +173,43 @@ class H5MSI_Train():
         # seperate them into matching data and label files
         for key in self.data_files.keys():
             if not ('Labels' in key):
-                self.train_files[key] = self.data_files[key]
-                self.train_files[key + '_Labels'] = self.data_files[key + '_Labels']
+                self.cores_list.append(key)
+                self.train_data[key] = self.data_files[key]
+                self.train_data[key + '_Labels'] = self.data_files[key + '_Labels']
  
         
     # Turn the labels from having multiple class labels into one hot    
     def one_hot_labels(self):
         
-        for key in self.train_files.keys():
+        for key in self.train_data.keys():
             if 'Labels' in key:
-                prev_labels = self.train_files[key] = self.train_files[key]
+                prev_labels = self.train_data[key] = self.train_data[key]
                 flat_labels = np.zeros((prev_labels.shape[0], 2))
                 
+                if prev_labels[0] == 4:
+                    self.train_data[key][:] = 0
                 
-                if (prev_labels[0] == 4): # Healthy
+                if (prev_labels[0] == 0): # Healthy
                     flat_labels[:, 0] = 1
                 else:
                     flat_labels[:, 1] = 1 # All other 3 labels
                 
                 self.flat_labels[key] = flat_labels
+        
+        count_pos = 0
+        count_neg = 0
+        for key in self.train_data.keys():
+            if 'Labels' in key:
+                count_pos +=np.sum(self.flat_labels[key] [:,1])
+                count_neg +=np.sum(self.flat_labels[key] [:,0])
                 
+            
+        print("Initial Pos: ", count_pos)
+        print("Initial Neg: ", count_neg)
 
-        
-        
-        
-        
-        
-
-def single_to_one_hot(labels, num_classes):
-        #diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
-        # shifted to {'high': 0, 'CA': 1, 'low': 2, 'healthy': 3}
-    one_hot_labels = np.zeros((labels.shape[0], num_classes))
-    for hot_class in range(0, num_classes):
-        class_locations = np.where(labels == hot_class)
-        one_hot_labels[class_locations, hot_class] = 1
-        
-    return(one_hot_labels)
 
 
 #orig = MSITrainData()
 
-h5 = H5MSI_Train()            
-h5.one_hot_labels()
+#h5 = H5MSI_Train()            
+#h5.one_hot_labels()
