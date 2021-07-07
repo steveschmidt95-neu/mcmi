@@ -306,11 +306,11 @@ class MIL():
             train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
             
             train_labels = np.zeros((self.batch_size, self.num_classes))
-            train_labels[:, self.train_core_true_label[core]] = 1
+            train_labels[:, 0] = 1
             
             cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
             total_cost+=cost
-            self.core_probability_labels[core][batch_idx:batch_idx+self.batch_size] = preds
+            self.train_core_probability_labels[core][batch_idx:batch_idx+self.batch_size] = preds
             batch_idx += self.batch_size
             
             healthy_computed += batch_size
@@ -324,9 +324,10 @@ class MIL():
         train_batch = np.reshape(train_batch, (train_batch.shape[0], train_batch.shape[1], 1))
         
         train_labels = np.zeros((self.batch_size, self.num_classes))
+        train_labels[:, 0] = 1
         
         cost, preds = self.net1.single_core_compute_params(train_batch, train_labels, keep_prob=self.keep_prob)
-        self.core_probability_labels[core][(self.batch_size*-1):, :] = preds
+        self.train_core_probability_labels[core][(self.batch_size*-1):, :] = preds
         total_cost+=cost
         
         return(total_cost)
@@ -464,7 +465,7 @@ class MIL():
             total_subtissues = self.train_core_pred_sub_labels[core].shape[0]
             total_count += total_subtissues
 
-            positive_predicted = (len(np.where(self.train_core_pred_sub_labels[core] == 1)[0]))
+            positive_predicted = (len(np.where(self.train_core_pred_sub_labels[core][:,1] == 1)[0]))
             healthy_predicted = int(total_subtissues - positive_predicted)
             
             positive_predicted_total+=positive_predicted
@@ -489,7 +490,7 @@ class MIL():
             total_subtissues = self.train_core_pred_sub_labels[core].shape[0]
             total_count += total_subtissues
 
-            positive_predicted = (len(np.where(self.train_core_pred_sub_labels[core] == 1)[0]))
+            positive_predicted = (len(np.where(self.train_core_pred_sub_labels[core][:,1] == 1)[0]))
             healthy_predicted = int(total_subtissues - positive_predicted)            
             
             positive_predicted_total+=positive_predicted
