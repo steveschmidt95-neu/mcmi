@@ -143,6 +143,7 @@ class H5MSI_Train():
     
     def __init__(self):
         self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'Data')
+        self.multi_class_label_folder = os.path.join(os.path.dirname(os.getcwd()), "MICNN_Out")
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
         
         h5_files = os.listdir(self.data_folder)
@@ -155,6 +156,7 @@ class H5MSI_Train():
         self.data_is_flat = False
         self.flat_labels = {}
         self.cores_list = []
+        self.multi_class_labels = {}
         
         # Read in all the h5 files
         for h5_file in h5_files:
@@ -205,11 +207,22 @@ class H5MSI_Train():
         for key in self.train_data.keys():
             if 'Labels' in key:
                 count_pos +=np.sum(self.flat_labels[key] [:,1])
-                count_neg +=np.sum(self.flat_labels[key] [:,0])
-                
+                count_neg +=np.sum(self.flat_labels[key] [:,0])       
             
         print("Initial Pos: ", count_pos)
         print("Initial Neg: ", count_neg)
+        
+    def load_multiclass_labels(self):
+        for core in self.train_data.cores_list:
+            labels_filename = os.path.join(self.out_path, core + '_multiclass.hdf5')
+            with h5py.File(labels_filename, "r") as hf:
+                dname = list(hf.keys())[0]
+                n1 = hf.get(dname)    
+                n1_array = np.copy(n1)
+                self.multi_class_labels[core] = n1_array
+            
+            
+            
 
 
 

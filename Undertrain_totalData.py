@@ -24,6 +24,7 @@ from net1_MIL import MSInet1
 import matplotlib.pyplot as plt
 import matplotlib
 import random
+import h5py
 
 
 def single_to_one_hot(labels, num_classes):
@@ -43,8 +44,6 @@ def one_hot_probability_to_single_label(pred_labels, prev_labels, num_classes):
     if (uncertain_pred_locations[0].shape[0]>0):
         argmax_labels[uncertain_pred_locations[0]] = np.argmax(prev_labels[uncertain_pred_locations])
     return(argmax_labels)
-    
-    
 
 
 class MIL():
@@ -62,7 +61,9 @@ class MIL():
         if small_train:
             #self.train_data_total.cores_list = ['ROI8TMA2train', 'ROI10TMA1train']
             self.train_data_total.cores_list = ['ROI8TMA2train', 'ROI10TMA1train', 'ROI9TMA1train', 'ROI24TMA1train']
-
+        
+        self.out_path = os.path.join(os.path.dirname(os.getcwd()), 'MICNN_Out')
+        
         self.diagnosis_dict =         {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.diagnosis_dict_reverse = {1: 'high', 2: 'CA', 3: 'low', 0:'healthy'}
         
@@ -126,8 +127,6 @@ class MIL():
         self.test_core_pred_sub_labels = {}
         self.test_core_probability_labels = {}
         self.test_positions = {}
-
-
         
         for core in self.smallROI.cores_list:
             core_positions = self.smallROI.core_specific_positions[core]
@@ -148,6 +147,24 @@ class MIL():
                 
         self.test_total_healthy_subtissue = self.count_healthy_locs_core_only()
     
+    def save_all_cores_multiLabel(self):
+        print("Saving Cores . . .")
+        for core in self.train_data_total.cores_list:
+            true_multiclass_label = self.train_core_true_label[core]
+            
+            # healthy class just save all 0's
+            prev_labels = self.train_core_pred_sub_labels[core]
+            if true_multiclass_label == 0:
+                prev_labels = np.zeros((prev_labels.shape[0]))
+            
+            # the other labels are goin to be only 1's so its save to multiply them by their true core label
+            else:
+                prev_labels = np.argmax(prev_labels, axis=1)
+                prev_labels *= true_multiclass_label
+            
+            labels_filename = os.path.join(self.out_path, core + '_multiclass.hdf5')
+            with h5py.File(labels_filename, "w") as f:
+                dset = f.create_dataset(core + "multiclass_labels", data=prev_labels, dtype='f')
     
     def _compute_params_healthy_only_single_core2class_hetero(self, core):
         
@@ -614,7 +631,6 @@ class MIL():
                 total_high += total_pos
                 tn_all_cores += tn
                 total_neg_all_cores += total_neg
-                
         
         accuracy = (tp_high + tn_all_cores) / (total_high + total_neg_all_cores)
         print('Accuracy: ', accuracy)
@@ -638,6 +654,7 @@ class MIL():
         
         if balanced_accuracy > self.highest_score:
             self.highest_score = balanced_accuracy
+            self.save_all_cores_multiLabel()
         print('Highest Balanced Accuracy: ', self.highest_score)
         print('  - Resuming Training  - ')
     
@@ -691,11 +708,11 @@ two_class_per_core=False # make labels in each core only be healthy or the core 
 reset_healthy_count = False # include healthy subtissue in non-healthy cores to count used for balancing classes
 train_non_healthy_only = False # train on only the non-healthy assigned locations in non-healthy tissues
 enforce_healthy_constraint = False # Enforce the same constraint for healthy tissus on non-healthy cores
-small_train = True
+small_train = False
 shuffle_core_list = True
 undertrain=True
 
-test_every_x = 3
+test_every_x = 1
 num_epochs=150
 lr=.001
 
