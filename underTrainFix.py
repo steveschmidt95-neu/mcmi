@@ -591,7 +591,7 @@ class MIL():
             # Make sure at least k values is labeled non-healthy if core is non-healthy
             else:
                 # All labels are healthy
-                if np.sum(self.train_core_pred_sub_labels[core][:,0]) < k_large_elements:
+                if np.sum(self.train_core_pred_sub_labels[core][:,1]) < k_large_elements:
                     #Pick the max values specific to the core class
                     k_max_element_lcoations = np.argpartition(self.train_core_probability_labels[core][:, core_label], -k_large_elements)[-k_large_elements:]
                     self.train_core_pred_sub_labels[core][k_max_element_lcoations, 0] = 0
