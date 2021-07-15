@@ -174,7 +174,7 @@ class MIL():
         batch_idx  = 0
         cost = 0
         
-        if(self.limiting_factor==1 and (self.negative_trained > self.positive_predicted)):
+        if(self.limiting_factor==1 and (self.negative_trained >= self.positive_predicted)):
             self.neg_train_limit_hit = 1
             return(total_cost)
         
@@ -182,8 +182,9 @@ class MIL():
         valid_input_val_locs = list(valid_input_val_locs)
         np.random.shuffle(valid_input_val_locs)
         total_input_vals = len(valid_input_val_locs) 
-                
-        spec = self.train_core_spec[core][valid_input_val_locs]
+        
+        spec = np.copy(self.train_core_spec[core])
+        spec = spec[valid_input_val_locs]
         
         while (batch_idx+self.batch_size < total_input_vals):
             train_batch = spec[batch_idx:batch_idx+self.batch_size]
@@ -198,7 +199,7 @@ class MIL():
             
             # Hit the limit on training healthy subtissues
             self.negative_trained += batch_size
-            if(self.limiting_factor==1 and (self.negative_trained > self.positive_predicted)):
+            if(self.limiting_factor==1 and (self.negative_trained >= self.positive_predicted)):
                 self.neg_train_limit_hit = 1
                 return(total_cost)
             
@@ -219,6 +220,7 @@ class MIL():
             total_cost+=cost
             self.negative_trained += batch_size
         except ValueError:
+            print("Not Enough Healthy Tissues in Hetero COre")
             print("Wring Shape: ", train_batch.shape)
         
         return(total_cost)
@@ -229,7 +231,7 @@ class MIL():
         batch_idx  = 0
         cost = 0
         
-        if(self.limiting_factor==0 and (self.positive_trained > self.negative_predicted)):
+        if(self.limiting_factor==0 and (self.positive_trained >= self.negative_predicted)):
             self.pos_train_limit_hit = 1
             return(total_cost)        
         
@@ -238,7 +240,8 @@ class MIL():
         np.random.shuffle(valid_input_val_locs)
         total_input_vals = len(valid_input_val_locs)
         
-        spec = self.train_core_spec[core][valid_input_val_locs]
+        spec = np.copy(self.train_core_spec[core])
+        spec = spec[valid_input_val_locs]
         
         while (batch_idx+self.batch_size < total_input_vals):
             train_batch = spec[batch_idx:batch_idx+self.batch_size]
@@ -253,7 +256,7 @@ class MIL():
             
             # Hit the limit on training non-healthy subtissues
             self.positive_trained += batch_size
-            if(self.limiting_factor==0 and (self.positive_trained > self.negative_predicted)):
+            if(self.limiting_factor==0 and (self.positive_trained >= self.negative_predicted)):
                 self.pos_train_limit_hit = 1
                 return(total_cost)
             
@@ -281,7 +284,6 @@ class MIL():
     # Heterogenous classes training at the same time
     def _compute_params_single_core_2class(self, core):
         cost = 0
-        healthy_computed = 0
         
         total_cost = 0
         batch_idx  = 0
@@ -321,13 +323,13 @@ class MIL():
         total_cost = 0
         batch_idx  = 0
         
-        if(self.limiting_factor==1 and (self.negative_trained > self.positive_predicted)):
+        if(self.limiting_factor==1 and (self.negative_trained >= self.positive_predicted)):
             self.neg_train_limit_hit = 1
             return(total_cost)
         
         total_input_vals = self.train_core_probability_labels[core].shape[0]
         
-        spec_local = self.train_core_spec[core]
+        spec_local = np.copy(self.train_core_spec[core])
         np.random.shuffle(spec_local)
         
         while (batch_idx+self.batch_size < total_input_vals):
@@ -344,7 +346,7 @@ class MIL():
             batch_idx += self.batch_size
             
             self.negative_trained += batch_size
-            if(self.limiting_factor==1 and (self.negative_trained > self.positive_predicted)):
+            if(self.limiting_factor==1 and (self.negative_trained >= self.positive_predicted)):
                 self.neg_train_limit_hit = 1
                 return(total_cost)
         
@@ -367,10 +369,15 @@ class MIL():
     def compute_params_all_cores2class(self, epoch, balance_training=False, balance_every_x = 5, train_non_healthy_only=True):
         
         #Reset the undertrain counters
-        self.pos_train_limit_hit = 1
-        self.neg_train_limit_hit = 1
+        self.pos_train_limit_hit = 0
+        self.neg_train_limit_hit = 0
         self.negative_trained = 0
         self.positive_trained = 0
+        
+        # Giving head start so i t won't perpetually train more of one class
+        if self.positive_predicted > self.negative_predicted:
+            pass
+            
         
         epoch_cost = 0
         for core in self.train_data_total.cores_list:
@@ -475,10 +482,7 @@ class MIL():
         if two_class_per_core:
             new_imputed_labels[np.where(new_imputed_labels!=self.diagnosis_dict['healthy'])] = self.core_true_label[core]
         self.test_core_probability_labels[core][total_input_vals-self.batch_size:] = preds
-        
-        diffs = len(np.where(previous_labels!=new_imputed_labels)[0])
         self.test_core_pred_sub_labels[core][total_input_vals-self.batch_size:] = new_imputed_labels
-        labels_changed+=diffs
         
     
     def impute_labels_all_cores(self,two_class_per_core=False):
@@ -568,8 +572,6 @@ class MIL():
             if reset_healthy_count:
                 self.reset_healthy_subtissue_input_count()
             
-            
-            
         print('Highest Score: ', self.highest_score)
         print('Final Score: ', self.final_score)
         print('Average Score: ', self.average_score/x)
@@ -593,21 +595,37 @@ class MIL():
                 # All labels are healthy
                 if np.sum(self.train_core_pred_sub_labels[core][:,1]) < k_large_elements:
                     #Pick the max values specific to the core class
-                    k_max_element_lcoations = np.argpartition(self.train_core_probability_labels[core][:, core_label], -k_large_elements)[-k_large_elements:]
+                    k_max_element_lcoations = np.argpartition(self.train_core_probability_labels[core][:, 1], -k_large_elements)[-k_large_elements:]
                     self.train_core_pred_sub_labels[core][k_max_element_lcoations, 0] = 0
                     self.train_core_pred_sub_labels[core][k_max_element_lcoations, 1] = 1
                     
-                    assert np.sum(np.sum(self.train_core_pred_sub_labels[core][:,1]) == k_large_elements)
+                    try:
+                        assert np.sum(self.train_core_pred_sub_labels[core][:,1])  >= k_large_elements
                     
+                    except:
+                        print("Error with non-healthy")
+                        print(k_max_element_lcoations)
+                        print(np.sum(self.train_core_pred_sub_labels[core][:,1]))
+                        self.train_core_pred_sub_labels[core]
+                        assert False
+                
                 # apply the same rule to healthy tissue, not leaving a tissue with comptely unhealthy labels
                 if enforce_healthy_constraint:
-                    healthy_locations = np.where(self.train_core_pred_sub_labels[core][:, 0]==1)[0]
-                    healthy_count = healthy_locations[0].shape[0]
-
-                    if healthy_count <k_large_elements:
-                        k_max_element_lcoations = np.argpartition(self.train_core_probability_labels[core][:, self.diagnosis_dict['healthy']], -k_large_elements)[-k_large_elements:]
-                        self.train_core_pred_sub_labels[core][k_max_element_lcoations] = self.diagnosis_dict['healthy']
-    
+                    if np.sum(self.train_core_pred_sub_labels[core][:,0]) < k_large_elements:
+                        #Pick the max values specific to the core class
+                        k_max_element_lcoations = np.argpartition(self.train_core_probability_labels[core][:, 0], -k_large_elements)[-k_large_elements:]
+                        self.train_core_pred_sub_labels[core][k_max_element_lcoations, 0] = 1
+                        self.train_core_pred_sub_labels[core][k_max_element_lcoations, 1] = 0
+                        
+                        try:
+                            assert np.sum(self.train_core_pred_sub_labels[core][:,0]) >= k_large_elements
+                        
+                        except:
+                            print("Error with healthy")
+                            print(k_max_element_lcoations)
+                            print(np.sum(self.train_core_pred_sub_labels[core][:,0]))
+                            print(self.train_core_pred_sub_labels[core])
+                            assert False
     # Evaulte according to only the given subtissue labels
     def eval_single_core_direct_labels(self, core):
         true_labels = self.test_core_true_sub_labels[core]
@@ -741,8 +759,8 @@ balance_every_x = 1
 two_class_per_core=False # make labels in each core only be healthy or the core label
 reset_healthy_count = False # include healthy subtissue in non-healthy cores to count used for balancing classes
 train_non_healthy_only = False # train on only the non-healthy assigned locations in non-healthy tissues
-enforce_healthy_constraint = False # Enforce the same constraint for healthy tissus on non-healthy cores
-small_train = True
+enforce_healthy_constraint = True # Enforce the same constraint for healthy tissus on non-healthy cores
+small_train = False
 shuffle_core_list = True
 undertrain=True
 

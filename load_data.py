@@ -289,6 +289,7 @@ class SmallROI():
         
         self.position = dset['position']
         self.spec = dset['spec']
+                
         subtissue_labels = dset['subtissue_label']
         tissue_label = dset['tissue_label']
         core = dset['core']

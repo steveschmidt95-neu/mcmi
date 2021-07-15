@@ -486,7 +486,7 @@ class MIL():
         
         print("Limiting Factor: ", limiting_factor)
         assert (healthy_predicted_total + positive_predicted_total) == total_count
-        self.healthy_predicted = healthy_predicted_total
+        self.negative_predicted = healthy_predicted_total
         self.positive_predicted = positive_predicted_total
         self.limiting_factor = limiting_factor
         
@@ -496,7 +496,7 @@ class MIL():
         total_count = 0
         
         for core in self.train_data_total.cores_list:
-            #print("COre: ", core, "Label: ", self.core_true_label[core])
+            
             total_subtissues = self.train_core_pred_sub_labels[core].shape[0]
             total_count += total_subtissues
 
@@ -701,7 +701,7 @@ class MIL():
         for core in self.smallROI.cores_list:
             self.viz_single_core_pred(core)
     
-batch_size = 8
+batch_size = 6
 balance_classes=False # train on same amount of each class per epoch
 balance_every_x = 1
 two_class_per_core=False # make labels in each core only be healthy or the core label

@@ -152,7 +152,7 @@ class H5MSI_Train():
         self.num_rois = len(h5_files)/2
         self.data_files = {}
         self.train_data = {}
-        self.num_classes = 4
+        self.num_classes = 2
         self.data_is_flat = False
         self.flat_labels = {}
         self.cores_list = []
@@ -178,7 +178,7 @@ class H5MSI_Train():
                 self.cores_list.append(key)
                 
                 data = self.data_files[key]
-                resized_data = np.zeros((data.shape[0], data.shape[1]+2))
+                resized_data = np.zeros((data.shape[0], data.shape[1]+2)) # fit with otehr data
                 resized_data[:, 0:(data.shape[1])] = data 
                 self.train_data[key] = resized_data
                 self.train_data[key + '_Labels'] = self.data_files[key + '_Labels']

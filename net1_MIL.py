@@ -107,16 +107,18 @@ class MSInet1(object):
         
         fc1 = tf.nn.relu(tf.matmul(flat_final_conv, W_fc1) + b_fc1)
         #drop_fc1 = tf.nn.dropout(fc1, self.fc_keep_prob, training=self.training)
-        drop_fc1 = v1.layers.dropout(fc1, self.fc_keep_prob, training=self.training)
         
-        fc2 = tf.nn.relu(tf.matmul(drop_fc1, W_fc2) + b_fc2)
+        fc2 = tf.nn.relu(tf.matmul(fc1, W_fc2) + b_fc2)
         self.y_conv = tf.identity(fc2, name='full_op')
         
         
         cross_entropy = v1.nn.softmax_cross_entropy_with_logits_v2(labels=self.y_dev, logits=self.y_conv)
         cross_entropy_sum = v1.reduce_sum(cross_entropy)
+        #self.train_step = v1.train.AdamOptimizer(learning_rate= self.lr).minimize(cross_entropy_sum)
         self.train_step = v1.train.GradientDescentOptimizer(learning_rate = self.lr).minimize(cross_entropy_sum)
+
         self.cost = cross_entropy_sum
+
         
         self.sess.run(v1.global_variables_initializer())
         
