@@ -13,22 +13,18 @@ uses the undertraining on the total dataset and then applies it to
 
 
 import numpy as np
-import tensorflow as tf
 import tensorflow.compat.v1 as v1
 v1.disable_eager_execution()
-import time
 import os
-from load_data import H5MSI, SmallROI
-from load_train_data import H5MSI_Train
+from loadSimData import SimData
 from net1_MIL import MSInet1
-import matplotlib.pyplot as plt
-import matplotlib
 import random
 import h5py
 
 
 def single_to_one_hot(labels, num_classes):
-        #diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
+    ##elf.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}    
+    #diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
         # shifted to {'high': 0, 'CA': 1, 'low': 2, 'healthy': 3}
     one_hot_labels = np.zeros((labels.shape[0], num_classes))
     for hot_class in range(0, num_classes):
@@ -44,32 +40,36 @@ def one_hot_probability_to_single_label(pred_labels, prev_labels, num_classes):
     if (uncertain_pred_locations[0].shape[0]>0):
         argmax_labels[uncertain_pred_locations[0]] = np.argmax(prev_labels[uncertain_pred_locations])
     return(argmax_labels)
+    
+def single_to_one_hot_binary(labels):
+    one_hot_labels = np.zeros((labels.shape[0], 2))
+    healthy_locs = np.where(labels==0)
+    non_healthy_locs = np.where(labels!=0)
+    
+    one_hot_labels[healthy_locs, 0] = 1
+    one_hot_labels[non_healthy_locs, 1] = 1
+    
+    return(one_hot_labels)
+    
+    
 
 
 class MIL():
     
-    def __init__(self, fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=12, 
+    def __init__(self, fc_units = 50, num_classes=2, width1=38, width2=18, width3=16, filters_layer1=12, 
                  filters_layer2=24, filters_layer3=48, batch_size=4, lr=.001, keep_prob=.8, 
-                 small_train=True, undertrain=True):
+                  undertrain=True):
         
-        self.train_data_total = H5MSI_Train()
-        self.train_data_total.one_hot_labels()
-        self.smallROI = SmallROI(num_classes=num_classes)
+        self.train_data_total = SimData()
+        self.train_data_total.split_cores()
+        self.smallROI = SimData()
         self.smallROI.split_cores()
         
-        # Use this for a smaller training set
-        if small_train:
-            #self.train_data_total.cores_list = ['ROI8TMA2train', 'ROI10TMA1train']
-            self.train_data_total.cores_list = ['ROI8TMA2train', 'ROI10TMA1train', 'ROI9TMA1train', 'ROI24TMA1train']
-        
-        self.out_path = os.path.join(os.path.dirname(os.getcwd()), 'MICNN_Out')
+        self.out_path = os.path.join(os.path.dirname(os.getcwd()), 'MICNNSim_Out')
         
         self.diagnosis_dict =         {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.diagnosis_dict_reverse = {1: 'high', 2: 'CA', 3: 'low', 0:'healthy'}
         
-        if num_classes == 2:
-            self.diagnosis_dict =         {'high': 1, 'healthy': 0}
-            self.diagnosis_dict_reverse = {1: 'high',  0:'healthy'}
 
         self.batch_size = batch_size
         self.lr = lr
@@ -128,7 +128,6 @@ class MIL():
         self.test_core_true_label = {}
         self.test_core_pred_sub_labels = {}
         self.test_core_probability_labels = {}
-        self.test_positions = {}
         
         for core in self.smallROI.cores_list:
             core_positions = self.smallROI.core_specific_positions[core]
@@ -137,16 +136,18 @@ class MIL():
             self.test_core_true_label[core] = int(self.smallROI.tissue_labels[core_positions][0])
             self.test_core_pred_sub_labels[core] = self.smallROI.tissue_labels[core_positions].astype(int)
             self.test_core_probability_labels[core] = np.zeros((self.smallROI.tissue_labels[core_positions].shape[0], self.num_classes))
-            self.test_positions[core] = self.smallROI.position[core_positions].astype(int)
-                        
+            
             
         for core in self.train_data_total.cores_list:
-            if 'Label' not in core:
-                self.train_core_spec[core] = self.train_data_total.train_data[core]
-                self.train_core_true_label[core] = int(self.train_data_total.train_data[core +'_Labels'][0])
-                self.train_core_pred_sub_labels[core] = self.train_data_total.flat_labels[core +'_Labels'].astype(int)
-                self.train_core_probability_labels[core] = np.zeros((self.train_data_total.train_data[core].shape[0], self.num_classes))
-                
+            core_positions = self.smallROI.core_specific_positions[core]
+            self.train_core_spec[core] = self.smallROI.spec[core_positions]
+            self.train_core_true_label[core] = int(self.smallROI.tissue_labels[core_positions][0])
+            sub_labels = self.smallROI.tissue_labels[core_positions].astype(int)
+            one_hot = single_to_one_hot_binary(sub_labels)
+            self.train_core_pred_sub_labels[core] = one_hot
+            self.train_core_probability_labels[core] = np.zeros((self.smallROI.tissue_labels[core_positions].shape[0], self.num_classes))
+            
+            
         self.test_total_healthy_subtissue = self.count_healthy_locs_core_only()
     
     def save_all_cores_multiLabel(self):
@@ -164,9 +165,9 @@ class MIL():
                 prev_labels = np.argmax(prev_labels, axis=1)
                 prev_labels *= true_multiclass_label
             
-            labels_filename = os.path.join(self.out_path, core + '_multiclass.hdf5')
+            labels_filename = os.path.join(self.out_path, str(core) + '_multiclass.hdf5')
             with h5py.File(labels_filename, "w") as f:
-                dset = f.create_dataset(core + "multiclass_labels", data=prev_labels, dtype='f')
+                dset = f.create_dataset(str(core) + "multiclass_labels", data=prev_labels, dtype='f')
     
     def _compute_params_healthy_only_single_core2class_hetero(self, core):
         
@@ -711,48 +712,6 @@ class MIL():
         print('  - Resuming Training  - ')
     
     
-   
-    def viz_single_core_pred(self, core):
-        positions = self.test_positions[core]
-        
-        xmax = np.max(positions[:, 0])
-        xmin = np.min(positions[:, 0])
-        ymax = np.max(positions[:, 1])
-        ymin = np.min(positions[:, 1])
-        image_array = np.zeros((xmax-xmin+1, ymax-ymin+1))
-        image_array[:] = 4
-        
-        cmap = matplotlib.colors.ListedColormap(['black', 'red', 'blue', 'yellow', 'white'])
-        bounds = [0, 1, 2, 3, 4,5]
-        norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
-        
-        for location in range(0, self.test_core_pred_sub_labels[core].shape[0]):
-            label = self.test_core_pred_sub_labels[core][location]
-            xloc = self.test_positions[core][location][0]- xmin
-            yloc = self.test_positions[core][location][1] - ymin
-            
-            image_array[xloc, yloc] = label
-        
-        ax = plt.gca()
-        ax.axes.xaxis.set_visible(False)
-        ax.axes.yaxis.set_visible(False)
-        plt.grid(True)
-        plt.imshow(image_array, interpolation='nearest',cmap=cmap,norm=norm)
-
-        title = "Core Number: " + str(core)  + " Label: " +  self.diagnosis_dict_reverse[self.core_true_label[core]]
-        print(title)
-        plt.title(title)
-        plt.colorbar(cmap=cmap,norm=norm,boundaries=bounds,ticks=[0,1,2, 3])
-        filename = 'Images/Pred'+ str(int(core)) + '.png'
-        print(filename)
-        
-        plt.savefig(filename, pad_inches=0)
-        plt.clf()
-    
-    def save_ims_all_cores(self):
-        for core in self.smallROI.cores_list:
-            self.viz_single_core_pred(core)
-    
 batch_size = 8
 balance_classes=False # train on same amount of each class per epoch
 balance_every_x = 1
@@ -760,7 +719,6 @@ two_class_per_core=False # make labels in each core only be healthy or the core 
 reset_healthy_count = False # include healthy subtissue in non-healthy cores to count used for balancing classes
 train_non_healthy_only = False # train on only the non-healthy assigned locations in non-healthy tissues
 enforce_healthy_constraint = True # Enforce the same constraint for healthy tissus on non-healthy cores
-small_train = False
 shuffle_core_list = True
 undertrain=True
 
@@ -770,7 +728,7 @@ lr=.001
 
 MIL = MIL(fc_units = 100, num_classes=2, width1=38,  width2=18, width3=16, filters_layer1=40, 
     filters_layer2=60, filters_layer3=100, batch_size=batch_size, lr=lr, keep_prob=.99,
-    small_train=small_train,undertrain=undertrain)
+    undertrain=undertrain)
 MIL.init_MSI()
 MIL.cnn_X_epoch(num_epochs,balance_classes=balance_classes,reset_healthy_count=reset_healthy_count, 
                 balance_every_x=balance_every_x, test_every_x=test_every_x,

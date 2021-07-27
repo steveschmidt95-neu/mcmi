@@ -10,6 +10,8 @@ Created on Thu Jul 15 17:39:20 2021
 from load_data import SmallROI
 from load_train_data import H5MSI_Train
 import numpy as np
+import os
+import h5py
 
 def single_to_one_hot(labels, num_classes):
         #diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
@@ -31,17 +33,8 @@ class DirectCNNDataset():
         #self.train_data_path = os.path.join(os.path.dirname(os.getcwd()), 'MICNN_Out')
         
         self.train_data = H5MSI_Train()
-        self.test_data = SmallROI()
-        self.test_data.split_cores()
         
         self.num_classes=num_classes
-        
-        self.test_core_spec = {}
-        self.test_core_true_sub_labels = {}
-        self.test_core_true_label = {}
-        self.test_core_pred_sub_labels = {}
-        self.test_core_probability_labels = {}
-        self.test_positions = {}
         
         class_label_count = {}
         for i in range(num_classes):
@@ -107,16 +100,4 @@ class DirectCNNDataset():
                             self.spec_dict[label][index_dict[label]:index_dict[label]+count, 0:591] = spec_wanted
                         index_dict[label] += count     
                 
-        
-        for core in self.test_data.cores_list:
-            core_positions = self.test_data.core_specific_positions[core]
-            self.test_core_spec[core] = self.test_data.spec[core_positions]
-            self.test_core_true_sub_labels[core] = self.test_data.subtissue_labels[core_positions]
-            self.test_core_true_label[core] = int(self.test_data.tissue_labels[core_positions][0])
-            self.test_core_pred_sub_labels[core] = self.test_data.tissue_labels[core_positions].astype(int)
-            self.test_core_probability_labels[core] = np.zeros((self.test_data.tissue_labels[core_positions].shape[0], self.num_classes))
-            self.test_positions[core] = self.test_data.position[core_positions].astype(int)
-            
-
-
-dset = DirectCNNDataset(num_classes=4)
+    
