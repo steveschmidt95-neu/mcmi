@@ -82,7 +82,7 @@ class MIL():
         self.sample_shape = int(self.smallROI.spec[0].shape[0])
         self.net1 = MSInet1(data_shape = self.sample_shape, fc_units=fc_units, num_classes=num_classes, width1=width1, width2=width2, width3=width3, filters_layer1=filters_layer1, filters_layer2=filters_layer2, filters_layer3=filters_layer3, batch_size=batch_size,lr=lr)
         self.net1.build_graph()
-        self.highest_score = .5
+        self.highest_score = .6
         self.average_score = 0
         self.final_score = 0
         

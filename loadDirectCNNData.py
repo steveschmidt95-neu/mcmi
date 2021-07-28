@@ -26,10 +26,10 @@ def single_to_one_hot(labels, num_classes):
 
 class DirectCNNDataset():
     
-    def __init__(self, num_classes=4, spect_shape = 593):
+    def __init__(self, num_classes=4, spect_shape = 593, spec_location = 'Data', train_data_location = '89AccuracyOut'):
         
-        self.spec_path = os.path.join(os.path.dirname(os.getcwd()), 'Data')
-        self.train_data_path = os.path.join(os.path.dirname(os.getcwd()), '89AccuracyOut')
+        self.spec_path = os.path.join(os.path.dirname(os.getcwd()), spec_location)
+        self.train_data_path = os.path.join(os.path.dirname(os.getcwd()), train_data_location)
         #self.train_data_path = os.path.join(os.path.dirname(os.getcwd()), 'MICNN_Out')
         
         self.train_data = H5MSI_Train()

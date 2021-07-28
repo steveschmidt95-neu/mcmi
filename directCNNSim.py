@@ -19,15 +19,11 @@ Created on Thu Jul 15 17:37:21 2021
 import numpy as np
 import tensorflow.compat.v1 as v1
 v1.disable_eager_execution()
-import time
 import os
-from loadDirectCNNData import DirectCNNDataset
-from load_data import SmallROI
+from loadSimData import DirectCNNSimDataset, SimData
 from net1_adam import MSInet1
 import matplotlib.pyplot as plt
 import matplotlib
-import random
-import h5py
 
 
 def single_to_one_hot(labels, num_classes):
@@ -51,15 +47,14 @@ def one_hot_probability_to_single_label(pred_labels, prev_labels, num_classes):
 
 class MIL():
     
-    def __init__(self, fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=12, 
+    def __init__(self, input_file = 'MICNNSim_Out', fc_units = 50, num_classes=4, width1=38, width2=18, width3=16, filters_layer1=12, 
                  filters_layer2=24, filters_layer3=48, batch_size=4, lr=.001, keep_prob=.8):
         
-        self.train_dataset = DirectCNNDataset(num_classes=4)
+        self.train_dataset = DirectCNNSimDataset(num_classes=4, train_data_location=input_file)
         
-        self.smallROI = SmallROI(num_classes=num_classes)
+        self.smallROI = SimData()
         self.smallROI.split_cores()
         
-        assert False
         
         self.diagnosis_dict =         {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.diagnosis_dict_reverse = {1: 'high', 2: 'CA', 3: 'low', 0:'healthy'}
@@ -342,7 +337,7 @@ class MIL():
         #print(title)
         plt.title(title)
         plt.colorbar(cmap=cmap,norm=norm,boundaries=bounds,ticks=[0,1,2, 3])
-        filename = 'Images/Pred'+ str(int(core)) + '.png'
+        filename = 'SimImages/Pred'+ str(int(core)) + '.png'
         #print(filename)
         
         plt.savefig(filename, pad_inches=0)
@@ -355,12 +350,13 @@ class MIL():
     
 batch_size = 3 # per 
 small_train = False
+input_file = 'Sim88_2_out'
 
 test_every_x = 5
 num_epochs=100000
 lr=.001
 
-MIL = MIL(fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=40, 
+MIL = MIL(input_file = input_file, fc_units = 100, num_classes=4, width1=38,  width2=18, width3=16, filters_layer1=40, 
     filters_layer2=60, filters_layer3=100, batch_size=batch_size, lr=lr, keep_prob=.99)
 MIL.init_MSI()
 MIL.cnn_X_epoch(num_epochs,test_every_x=test_every_x)
