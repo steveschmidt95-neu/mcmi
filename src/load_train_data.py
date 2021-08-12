@@ -24,6 +24,7 @@ class ROI_Total_Data():
         
         self.data = np.zeros((sliced_roi_positions.shape[0], msi_data.shape[1]))
         self.labels = np.zeros((sliced_roi_positions.shape[0])) # first spot is core label, second is subtissue
+        self.positions = np.zeros((sliced_roi_positions.shape[0], 2))
         miss_count = 0
         miss_lines = []
         
@@ -43,6 +44,9 @@ class ROI_Total_Data():
                     found_msi_data = True
                     self.data[line, :] = msi_data[position_row, :]
                     self.labels[line] = sliced_roi_positions[line, 4]
+                    self.positions[line, 0] = x
+                    self.positions[line, 1] = y
+                    
                         
             if not found_msi_data:
                 #assert False # no msi data found for this
@@ -52,6 +56,7 @@ class ROI_Total_Data():
         print('Missing Values: ', miss_count)
         self.labels = np.delete(self.labels, miss_lines, 0)
         self.data = np.delete(self.data, miss_lines, 0)
+        self.positions = np.delete(self.positions, miss_lines, 0)
         assert self.labels.shape[0] == self.data.shape[0]
         
         
@@ -64,7 +69,11 @@ class ROI_Total_Data():
             
         labels_filename = os.path.join(self.data_folder, 'ROI'+ self.roi_num +  "TMA" + self.tma_num + 'train_Labels' + '.hdf5')
         with h5py.File(labels_filename, "w") as f:
-            dset = f.create_dataset("roi" + self.roi_num + "train_labels", data=self.labels, dtype='f')
+            dset = f.create_dataset("roi" + self.roi_num + "train_labels", data=self.labels, dtype='i8')
+            
+        positions_filename = os.path.join(self.data_folder, 'ROI'+ self.roi_num +  "TMA" + self.tma_num + 'train_positions' + '.hdf5')
+        with h5py.File(positions_filename, "w") as f:
+            dset = f.create_dataset("roi" + self.roi_num + "train_positions", data=self.positions, dtype='i8')
 
 
 class MSITrainData():
@@ -175,7 +184,7 @@ class H5MSI_Train():
         
         # seperate them into matching data and label files
         for key in self.data_files.keys():
-            if not ('Labels' in key):
+            if not ('Labels' in key) and not('positions') in key:
                 self.cores_list.append(key)
                 
                 data = self.data_files[key]
@@ -223,11 +232,3 @@ class H5MSI_Train():
                 self.multi_class_labels[core] = n1_array
             
             
-            
-
-
-
-#orig = MSITrainData()
-
-#h5 = H5MSI_Train()            
-#5.one_hot_labels()

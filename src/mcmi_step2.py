@@ -21,7 +21,6 @@ uses the undertraining on the total dataset and then applies it to
 
 
 import numpy as np
-import tensorflow as tf
 import tensorflow.compat.v1 as v1
 v1.disable_eager_execution()
 import os
@@ -57,20 +56,22 @@ class MIL():
                     
         self.h5_out_path = os.path.join(os.path.dirname(os.getcwd()), 'FinalOutputPredictions')
         self.image_out_path = os.path.join(os.path.dirname(os.getcwd()), 'FinalOutputImages')
-        
+        self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'Data')
+
         self.train_data_total = H5MSI_Train()
         self.train_data_total.one_hot_labels()
         
         self.train_core_spec = {}
         self.train_core_pred_sub_labels = {}
         self.train_positions = {}
+        self.test_core_true_label = {}
                         
         for core in self.train_data_total.cores_list:
-            if 'Label' not in core:
-                core_positions = self.train_data_total.core_specific_positions[core]
+            if 'Label' not in core and 'position' not in core:
                 self.train_core_spec[core] = self.train_data_total.train_data[core]
                 self.train_core_pred_sub_labels[core] = np.zeros((self.train_core_spec[core].shape[0]))
-                self.train_positions[core] = self.smallROI.position[core_positions].astype(int)
+                self.train_positions[core] = self.get_positions_for_core(core)
+                self.test_core_true_label[core] = int(self.train_data_total.train_data[core +'_Labels'][0])
         
         self.diagnosis_dict =         {'high': 1, 'CA': 2, 'low': 3, 'healthy': 0}
         self.diagnosis_dict_reverse = {1: 'high', 2: 'CA', 3: 'low', 0:'healthy'}
@@ -140,7 +141,6 @@ class MIL():
         self.predict_all_cores()
         self.save_predictions_all_cores()
         
-        assert False # not implemented
         self.save_ims_all_cores()
         
     
@@ -171,7 +171,7 @@ class MIL():
     
     def viz_single_core_pred(self, core):
 
-        positions = self.test_positions[core]
+        positions = self.train_positions[core]
         
         xmax = np.max(positions[:, 0])
         xmin = np.min(positions[:, 0])
@@ -184,10 +184,10 @@ class MIL():
         bounds = [0, 1, 2, 3, 4,5]
         norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
         
-        for location in range(0, self.test_core_pred_sub_labels[core].shape[0]):
-            label = self.test_core_pred_sub_labels[core][location]
-            xloc = self.test_positions[core][location][0]- xmin
-            yloc = self.test_positions[core][location][1] - ymin
+        for location in range(0, self.train_core_pred_sub_labels[core].shape[0]):
+            label = self.train_core_pred_sub_labels[core][location]
+            xloc = self.train_positions[core][location][0]- xmin
+            yloc = self.train_positions[core][location][1] - ymin
             
             image_array[xloc, yloc] = label
         
@@ -200,7 +200,7 @@ class MIL():
         title = "Core Number: " + str(core)  + " Label: " +  self.diagnosis_dict_reverse[self.test_core_true_label[core]]
         plt.title(title)
         plt.colorbar(cmap=cmap,norm=norm,boundaries=bounds,ticks=[0,1,2, 3])
-        filename = 'Images/Pred'+ str(int(core)) + '.png'
+        filename = os.path.join(self.image_out_path, core + '.png')
         
         plt.savefig(filename, pad_inches=0)
         plt.clf()
@@ -209,6 +209,17 @@ class MIL():
     def predict_all_cores(self):
         for core in self.train_data_total.cores_list:
             self.get_test_labels_single_core(core)
+            
+    
+    def get_positions_for_core(self, core):
+        positions_filename = os.path.join(self.data_folder, core + '_positions' + '.hdf5')
+        with h5py.File(positions_filename, "r") as hf:
+            dname = list(hf.keys())[0]
+            n1 = hf.get(dname)    
+            positions_array = np.copy(n1)
+
+        return(positions_array)
+
    
     def save_predictions_all_cores(self):
         print("Saving Core Predictions as H5 Files")
@@ -228,7 +239,7 @@ class MIL():
 batch_size = 4 # per 
 
 num_classes = 4
-num_epochs=2
+num_epochs=1
 lr=.001
 
 MIL = MIL(fc_units = 100, num_classes=num_classes, width1=38,  width2=18, width3=16, filters_layer1=40, 
