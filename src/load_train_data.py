@@ -81,7 +81,7 @@ class MSITrainData():
     def __init__(self, data_name = 'msi.h5', sub_tab_name = 'subtissue_labels.tabular',
                  total_pixel_name = 'final_annotation_complete_cores_2.tabular'):
         
-        self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'OriginalData')
+        self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'InputData')
         self.data_path = os.path.join(self.data_folder, data_name)
         #self.sub_tab_path = os.path.join(self.data_folder, sub_tab_name)
         self.total_pixel_name = os.path.join(self.data_folder, total_pixel_name)
@@ -201,7 +201,7 @@ class H5MSI_Train():
             if 'Labels' in key:
                 prev_labels = self.train_data[key] = self.train_data[key]
                 flat_labels = np.zeros((prev_labels.shape[0], 2))
-                
+            
                 if prev_labels[0] == 4:
                     self.train_data[key][:] = 0
                 
