@@ -20,7 +20,7 @@ class ROI_Total_Data():
         self.roi_num = str(int(sliced_roi_positions[0, 3]))
         self.tma_num = str(int(sliced_roi_positions[0, 2]))
         self.data = None
-        self.data_folder = os.path.join(os.path.dirname(os.getcwd()), 'Data')
+        self.out_data_folder = os.path.join(os.path.dirname(os.getcwd()), 'Data')
         
         self.data = np.zeros((sliced_roi_positions.shape[0], msi_data.shape[1]))
         self.labels = np.zeros((sliced_roi_positions.shape[0])) # first spot is core label, second is subtissue
@@ -62,16 +62,16 @@ class ROI_Total_Data():
         
     def save_h5(self):
         
-        data_filename = os.path.join(self.data_folder, 'ROI' + self.roi_num + "TMA" + self.tma_num + 'train.hdf5')
+        data_filename = os.path.join(self.out_data_folder, 'ROI' + self.roi_num + "TMA" + self.tma_num + 'train.hdf5')
         assert (len(self.data.shape)==2)
         with h5py.File(data_filename, "w") as f:
             dset = f.create_dataset("roi" + self.roi_num + "train_data", data=self.data, dtype='f')
             
-        labels_filename = os.path.join(self.data_folder, 'ROI'+ self.roi_num +  "TMA" + self.tma_num + 'train_Labels' + '.hdf5')
+        labels_filename = os.path.join(self.out_data_folder, 'ROI'+ self.roi_num +  "TMA" + self.tma_num + 'train_Labels' + '.hdf5')
         with h5py.File(labels_filename, "w") as f:
             dset = f.create_dataset("roi" + self.roi_num + "train_labels", data=self.labels, dtype='i8')
             
-        positions_filename = os.path.join(self.data_folder, 'ROI'+ self.roi_num +  "TMA" + self.tma_num + 'train_positions' + '.hdf5')
+        positions_filename = os.path.join(self.out_data_folder, 'ROI'+ self.roi_num +  "TMA" + self.tma_num + 'train_positions' + '.hdf5')
         with h5py.File(positions_filename, "w") as f:
             dset = f.create_dataset("roi" + self.roi_num + "train_positions", data=self.positions, dtype='i8')
 
@@ -87,6 +87,7 @@ class MSITrainData():
         self.total_pixel_name = os.path.join(self.data_folder, total_pixel_name)
         self.diagnosis_dict = {'high': 1, 'CA': 2, 'low': 3, 'healthy': 4}
         self.tumor_dict = {'Stroma': 0, 'Tumor': 1}
+        
         
         f = h5py.File(self.data_path, 'r')
         keys = list(f.keys())
@@ -223,6 +224,7 @@ class H5MSI_Train():
         print("Initial Neg: ", count_neg)
         
     def load_multiclass_labels(self):
+    
         for core in self.train_data.cores_list:
             labels_filename = os.path.join(self.out_path, core + '_multiclass.hdf5')
             with h5py.File(labels_filename, "r") as hf:

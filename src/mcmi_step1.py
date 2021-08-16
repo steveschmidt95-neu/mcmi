@@ -9,16 +9,11 @@ Created on Tue Aug 10 12:16:10 2021
 
 
 import numpy as np
-import tensorflow as tf
 import tensorflow.compat.v1 as v1
 v1.disable_eager_execution()
-import time
 import os
-from load_data import H5MSI, SmallROI
 from load_train_data import H5MSI_Train
 from net1_MIL import MSInet1
-import matplotlib.pyplot as plt
-import matplotlib
 import random
 import h5py
 
@@ -568,7 +563,7 @@ batch_size = 8
 enforce_healthy_constraint = True # Enforce the same constraint for healthy tissus on non-healthy cores
 
 test_every_x = 1
-num_epochs=3
+num_epochs=10
 lr=.001
 
 MIL = MIL(fc_units = 100, num_classes=2, width1=38,  width2=18, width3=16, filters_layer1=40, 

@@ -75,7 +75,7 @@ class DirectCNNDataset():
                             label = int(n1_array[label_locations][0])
                         
                         class_label_count[label] += count
-                except FileNotFoundError:
+                except (FileNotFoundError, OSError) as e:
                     print("Cant Find Core: ", core)
         
         self.spec_dict = {}
@@ -118,7 +118,7 @@ class DirectCNNDataset():
                                 spec_wanted = np.take(spec_array, label_locations, 0)
                                 self.spec_dict[label][index_dict[label]:index_dict[label]+count,:] = spec_wanted
                             index_dict[label] += count     
-                except FileNotFoundError:
+                except (FileNotFoundError, OSError) as e:
                     print("Cant Find Core: ", core)
                     
                     

@@ -239,7 +239,7 @@ class MIL():
 batch_size = 4 # per 
 
 num_classes = 4
-num_epochs=1
+num_epochs=10
 lr=.001
 
 MIL = MIL(fc_units = 100, num_classes=num_classes, width1=38,  width2=18, width3=16, filters_layer1=40, 
